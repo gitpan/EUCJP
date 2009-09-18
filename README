@@ -19,7 +19,7 @@ DESCRIPTION
       This software is "Yet Another JPerl" written by Perl.
       We can write the script in EUC-JP again.
 
-      This software is a beta version for the public comment.
+      This software treats EUC-JP directly. Therefore, there is not UTF8 flag.
 
 INSTALLATION
 

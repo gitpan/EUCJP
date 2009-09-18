@@ -9,9 +9,9 @@ package Eeucjp;
 
 use strict;
 use 5.00503;
-use vars qw($VERSION $_warning);
+use vars qw($VERSION $_warning $last_s_matched);
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.40 $ =~ m/(\d+)/xmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.41 $ =~ m/(\d+)/xmsg;
 
 use Fcntl;
 use Symbol;
@@ -29,7 +29,7 @@ BEGIN {
     }
 }
 
-my $your_char = q{\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[\x00-\xFF]};
+my $your_char = q{\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[\x00-\xFF]};
 
 # regexp of character
 my  $q_char   = qr/$your_char/oxms;
@@ -142,21 +142,18 @@ else {
 sub import() {}
 sub unimport() {}
 sub Eeucjp::split(;$$$);
-sub Eeucjp::tr($$$;$);
+sub Eeucjp::tr($$$$;$);
 sub Eeucjp::chop(@);
 sub Eeucjp::index($$;$);
 sub Eeucjp::rindex($$;$);
-sub Eeucjp::lc($);
+sub Eeucjp::lc(@);
 sub Eeucjp::lc_();
-sub Eeucjp::uc($);
+sub Eeucjp::uc(@);
 sub Eeucjp::uc_();
-sub Eeucjp::shift_matched_var();
+sub Eeucjp::capture($);
 sub Eeucjp::ignorecase(@);
-sub Eeucjp::chr($);
+sub Eeucjp::chr(;$);
 sub Eeucjp::chr_();
-sub Eeucjp::ord($);
-sub Eeucjp::ord_();
-sub Eeucjp::reverse(@);
 sub Eeucjp::r(;*@);
 sub Eeucjp::w(;*@);
 sub Eeucjp::x(;*@);
@@ -223,7 +220,10 @@ sub Eeucjp::chdir(;$);
 sub Eeucjp::do($);
 sub Eeucjp::require(;$);
 
-sub EUCJP::length;
+sub EUCJP::ord(;$);
+sub EUCJP::ord_();
+sub EUCJP::reverse(@);
+sub EUCJP::length(;$);
 sub EUCJP::substr($$;$$);
 sub EUCJP::index($$;$);
 sub EUCJP::rindex($$;$);
@@ -430,11 +430,12 @@ sub Eeucjp::split(;$$$) {
 #
 # EUC-JP transliteration (tr///)
 #
-sub Eeucjp::tr($$$;$) {
+sub Eeucjp::tr($$$$;$) {
 
-    my $searchlist      = $_[1];
-    my $replacementlist = $_[2];
-    my $modifier        = $_[3] || '';
+    my $bind_operator   = $_[1];
+    my $searchlist      = $_[2];
+    my $replacementlist = $_[3];
+    my $modifier        = $_[4] || '';
 
     my @char            = $_[0] =~ m/\G ($q_char) /oxmsg;
     my @searchlist      = _charlist_tr($searchlist);
@@ -496,7 +497,13 @@ sub Eeucjp::tr($$$;$) {
             }
         }
     }
-    return $tr;
+
+    if ($bind_operator =~ m/ !~ /oxms) {
+        return not $tr;
+    }
+    else {
+        return $tr;
+    }
 }
 
 #
@@ -506,7 +513,7 @@ sub Eeucjp::chop(@) {
 
     my $chop;
     if (@_ == 0) {
-        my @char = m/\G ($q_char)/oxmsg;
+        my @char = m/\G ($q_char) /oxmsg;
         $chop = pop @char;
         $_ = join '', @char;
     }
@@ -572,7 +579,7 @@ sub Eeucjp::rindex($$;$) {
 #
 # EUC-JP lower case (with parameter)
 #
-sub Eeucjp::lc($) {
+sub Eeucjp::lc(@) {
 
     local $_ = shift if @_;
 
@@ -582,7 +589,7 @@ sub Eeucjp::lc($) {
 
     local $^W = 0;
 
-    return join('', map {$lc{$_}||$_} m/\G ($q_char)/oxmsg);
+    return join('', map {$lc{$_}||$_} m/\G ($q_char) /oxmsg), @_;
 }
 
 #
@@ -596,13 +603,13 @@ sub Eeucjp::lc_() {
 
     local $^W = 0;
 
-    return join('', map {$lc{$_}||$_} m/\G ($q_char)/oxmsg);
+    return join('', map {$lc{$_}||$_} m/\G ($q_char) /oxmsg);
 }
 
 #
 # EUC-JP upper case (with parameter)
 #
-sub Eeucjp::uc($) {
+sub Eeucjp::uc(@) {
 
     local $_ = shift if @_;
 
@@ -612,7 +619,7 @@ sub Eeucjp::uc($) {
 
     local $^W = 0;
 
-    return join('', map {$uc{$_}||$_} m/\G ($q_char) /oxmsg);
+    return join('', map {$uc{$_}||$_} m/\G ($q_char) /oxmsg), @_;
 }
 
 #
@@ -630,22 +637,16 @@ sub Eeucjp::uc_() {
 }
 
 #
-# EUC-JP shift matched variables
+# EUC-JP regexp capture
 #
-sub Eeucjp::shift_matched_var() {
+sub Eeucjp::capture($) {
 
-    # $1 --> return
-    # $2 --> $1
-    # $3 --> $2
-    # $4 --> $3
-    my $dollar1 = $1;
-
-    local $@;
-    for (my $digit=1; eval "defined(\$$digit)"; $digit++) {
-        eval sprintf '*%d = *%d', $digit, $digit+1;
+    if ($last_s_matched and ($_[0] =~ m/\A [1-9][0-9]* \z/oxms)) {
+        return $_[0] + 1;
     }
-
-    return $dollar1;
+    else {
+        return $_[0];
+    }
 }
 
 #
@@ -735,11 +736,16 @@ sub Eeucjp::ignorecase(@) {
 
             # rewrite character class or escape character
             elsif (my $char = {
-                '\D' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\d])',
-                '\H' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\h])',
-                '\S' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\s])',
-                '\V' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\v])',
-                '\W' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\w])',
+                '\D' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\d])',
+                '\S' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\s])',
+                '\W' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\w])',
+
+                '\H' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x09\x20])',
+                '\V' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x0A\x0B\x0C\x0D])',
+
+                '\h' => '[\x09\x20]',         # not include \xA0
+                '\v' => '[\x0A\x0B\x0C\x0D]', # not include \x85
+
                 }->{$char[$i]}
             ) {
                 $char[$i] = $char;
@@ -1078,15 +1084,18 @@ sub _charlist {
                 '\a' => "\a",
                 '\e' => "\e",
                 '\d' => '\d',
-                '\h' => '\h',
                 '\s' => '\s',
-                '\v' => '\v',
                 '\w' => '\w',
-                '\D' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\d])',
-                '\H' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\h])',
-                '\S' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\s])',
-                '\V' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\v])',
-                '\W' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^\w])',
+                '\D' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\d])',
+                '\S' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\s])',
+                '\W' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\w])',
+
+                '\H' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x09\x20])',
+                '\V' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x0A\x0B\x0C\x0D])',
+
+                '\h' => '[\x09\x20]',         # not include \xA0
+                '\v' => '[\x0A\x0B\x0C\x0D]', # not include \x85
+
             }->{$1};
         }
         elsif ($char[$i] =~ m/\A \\ ($q_char) \z/oxms) {
@@ -1190,7 +1199,15 @@ sub _charlist {
         }
 
         # single character of single octet code
-        elsif ($char[$i] =~ m/\A (?: [\x00-\xFF] | \\d | \\h | \\s | \\v | \\w ) \z/oxms) {
+        elsif ($char[$i] =~ m/\A (?: \\h ) \z/oxms) {
+            push @singleoctet, "\x09", "\x20";
+            $i += 1;
+        }
+        elsif ($char[$i] =~ m/\A (?: \\v ) \z/oxms) {
+            push @singleoctet, "\x0A","\x0B","\x0C","\x0D";
+            $i += 1;
+        }
+        elsif ($char[$i] =~ m/\A (?: [\x00-\xFF] | \\d | \\s | \\w ) \z/oxms) {
             push @singleoctet, $char[$i];
             $i += 1;
         }
@@ -1218,7 +1235,7 @@ sub _charlist {
         }
     }
     for (@charlist) {
-        if (m/\A (\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE]) ([\x00-\xFF]) \z/oxms) {
+        if (m/\A (\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE]) ([\x00-\xFF]) \z/oxms) {
             $_ = $1 . quotemeta $2;
         }
     }
@@ -1276,7 +1293,7 @@ sub charlist_not_qr {
         if (scalar(@singleoctet) >= 1) {
 
             # any character other than multiple octet and single octet character class
-            return '(?!' . join('|', @charlist) . ')(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^'. join('', @singleoctet) . '])';
+            return '(?!' . join('|', @charlist) . ')(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^'. join('', @singleoctet) . '])';
         }
         else {
 
@@ -1288,7 +1305,7 @@ sub charlist_not_qr {
         if (scalar(@singleoctet) >= 1) {
 
             # any character other than single octet character class
-            return                                 '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^'. join('', @singleoctet) . '])';
+            return                                 '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^'. join('', @singleoctet) . '])';
         }
         else {
 
@@ -1301,7 +1318,7 @@ sub charlist_not_qr {
 #
 # EUC-JP order to character (with parameter)
 #
-sub Eeucjp::chr($) {
+sub Eeucjp::chr(;$) {
 
     my $c = @_ ? $_[0] : $_;
 
@@ -1335,57 +1352,6 @@ sub Eeucjp::chr_() {
             $c = int($c / 0x100);
         }
         return pack 'C*', @chr;
-    }
-}
-
-#
-# EUC-JP character to order (with parameter)
-#
-sub Eeucjp::ord($) {
-
-    local $_ = shift if @_;
-
-    if (m/\A ($q_char) /oxms) {
-        my @ord = unpack 'C*', $1;
-        my $ord = 0;
-        while (my $o = shift @ord) {
-            $ord = $ord * 0x100 + $o;
-        }
-        return $ord;
-    }
-    else {
-        return CORE::ord $_;
-    }
-}
-
-#
-# EUC-JP character to order (without parameter)
-#
-sub Eeucjp::ord_() {
-
-    if (m/\A ($q_char) /oxms) {
-        my @ord = unpack 'C*', $1;
-        my $ord = 0;
-        while (my $o = shift @ord) {
-            $ord = $ord * 0x100 + $o;
-        }
-        return $ord;
-    }
-    else {
-        return CORE::ord $_;
-    }
-}
-
-#
-# EUC-JP reverse
-#
-sub Eeucjp::reverse(@) {
-
-    if (wantarray) {
-        return CORE::reverse @_;
-    }
-    else {
-        return join '', CORE::reverse(join('',@_) =~ m/\G ($q_char) /oxmsg);
     }
 }
 
@@ -3134,7 +3100,7 @@ OUTER:
 
         # wildcards with a drive prefix such as h:*.pm must be changed
         # to h:./*.pm to expand correctly
-        $expr =~ s# \A ((?:[A-Za-z]:)?) (\x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^/\\]) #$1./$2#oxms;
+        $expr =~ s# \A ((?:[A-Za-z]:)?) (\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^/\\]) #$1./$2#oxms;
 
         if (($head, $tail) = _parse_path($expr,$pathsep)) {
             if ($tail eq '') {
@@ -3270,8 +3236,8 @@ sub _parse_line {
     $line .= ' ';
     my @piece = ();
     while ($line =~ m{
-        " ( (?: \x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^"]   )*  ) " \s+ |
-          ( (?: \x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^"\s] )*  )   \s+
+        " ( (?: \x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^"]   )*  ) " \s+ |
+          ( (?: \x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^"\s] )*  )   \s+
         }oxmsg
     ) {
         push @piece, defined($1) ? $1 : $2;
@@ -3289,7 +3255,7 @@ sub _parse_path {
     $path .= '/';
     my @subpath = ();
     while ($path =~ m{
-        ((?: \x8F[\xA1-\xFE][\xA1-\xFE]|[\8E\xA1-\xFE][\x00-\xFF]|[^/\\] )+?) [/\\] }oxmsg
+        ((?: \x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^/\\] )+?) [/\\] }oxmsg
     ) {
         push @subpath, $1;
     }
@@ -3513,6 +3479,7 @@ sub _MSWin32_5Cended_path {
 # do EUC-JP file
 #
 sub Eeucjp::do($) {
+
     my($filename) = @_;
 
     my $realfilename;
@@ -3574,6 +3541,7 @@ ITER_DO:
 # of ISBN 1-56592-149-6 Programming Perl, Second Edition.
 
 sub Eeucjp::require(;$) {
+
     local $_ = shift if @_;
     return 1 if $INC{$_};
 
@@ -3630,13 +3598,65 @@ ITER_REQUIRE:
 }
 
 #
-# EUC-JP length by character
+# EUC-JP character to order (with parameter)
 #
-sub EUCJP::length {
+sub EUCJP::ord(;$) {
 
     local $_ = shift if @_;
 
-    return scalar m/\G ($q_char) /oxmsg;
+    if (m/\A ($q_char) /oxms) {
+        my @ord = unpack 'C*', $1;
+        my $ord = 0;
+        while (my $o = shift @ord) {
+            $ord = $ord * 0x100 + $o;
+        }
+        return $ord;
+    }
+    else {
+        return CORE::ord $_;
+    }
+}
+
+#
+# EUC-JP character to order (without parameter)
+#
+sub EUCJP::ord_() {
+
+    if (m/\A ($q_char) /oxms) {
+        my @ord = unpack 'C*', $1;
+        my $ord = 0;
+        while (my $o = shift @ord) {
+            $ord = $ord * 0x100 + $o;
+        }
+        return $ord;
+    }
+    else {
+        return CORE::ord $_;
+    }
+}
+
+#
+# EUC-JP reverse
+#
+sub EUCJP::reverse(@) {
+
+    if (wantarray) {
+        return CORE::reverse @_;
+    }
+    else {
+        return join '', CORE::reverse(join('',@_) =~ m/\G ($q_char) /oxmsg);
+    }
+}
+
+#
+# EUC-JP length by character
+#
+sub EUCJP::length(;$) {
+
+    local $_ = shift if @_;
+
+    local @_ = m/\G ($q_char) /oxmsg;
+    return scalar @_;
 }
 
 #
@@ -3644,24 +3664,30 @@ sub EUCJP::length {
 #
 sub EUCJP::substr ($$;$$) {
 
-    if (defined $_[3]) {
-        if (defined $_[4]) {
-            my(undef,$offset,$length,$replacement) = @_;
-            if ($_[0] =~ s/\A ((?:$q_char){$offset}) ((?:$q_char){0,$length}) \z/$1$replacement/xms) {
-                return $2;
-            }
+    my @char = $_[0] =~ m/\G ($q_char) /oxmsg;
+
+    # substr($string,$offset,$length,$replacement)
+    if (@_ == 4) {
+        my(undef,$offset,$length,$replacement) = @_;
+        my $substr = join '', splice(@char, $offset, $length, $replacement);
+        $_[0] = join '', @char;
+        return $substr;
+    }
+
+    # substr($string,$offset,$length)
+    elsif (@_ == 3) {
+        my(undef,$offset,$length) = @_;
+        return join '', (@char[$offset .. $#char])[0 .. $length-1];
+    }
+
+    # substr($string,$offset)
+    else {
+        my(undef,$offset) = @_;
+        if ($offset >= 0) {
+            return join '', @char[$offset .. $#char];
         }
         else {
-            my($expr,$offset,$length) = @_;
-            if ($expr =~ m/\A (?:$q_char){$offset} ((?:$q_char){0,$length}) \z/xms) {
-                return $1;
-            }
-        }
-    }
-    else {
-        my($expr,$offset) = @_;
-        if ($expr =~ m/\A (?:$q_char){$offset} (.*) \z/xms) {
-            return $1;
+            return join '', @char[($#char+$offset+1) .. $#char];
         }
     }
 
@@ -3675,10 +3701,10 @@ sub EUCJP::index($$;$) {
 
     my $index;
     if (@_ == 3) {
-        $index = Eeucjp::index($_[0],$_[1],$_[2]);
+        $index = Eeucjp::index($_[0], $_[1], CORE::length(EUCJP::substr($_[0], 0, $_[2])));
     }
     else {
-        $index = Eeucjp::index($_[0],$_[1]);
+        $index = Eeucjp::index($_[0], $_[1]);
     }
 
     if ($index == -1) {
@@ -3696,10 +3722,10 @@ sub EUCJP::rindex($$;$) {
 
     my $rindex;
     if (@_ == 3) {
-        $rindex = Eeucjp::rindex($_[0],$_[1],$_[2]);
+        $rindex = Eeucjp::rindex($_[0], $_[1], CORE::length(EUCJP::substr($_[0], 0, $_[2])));
     }
     else {
-        $rindex = Eeucjp::rindex($_[0],$_[1]);
+        $rindex = Eeucjp::rindex($_[0], $_[1]);
     }
 
     if ($rindex == -1) {
@@ -3736,13 +3762,10 @@ Eeucjp - Run-time routines for EUCJP.pm
     Eeucjp::lc_;
     Eeucjp::uc(...);
     Eeucjp::uc_;
-    Eeucjp::shift_matched_var();
+    Eeucjp::capture(...);
     Eeucjp::ignorecase(...);
     Eeucjp::chr(...);
     Eeucjp::chr_;
-    Eeucjp::ord(...);
-    Eeucjp::ord_;
-    Eeucjp::reverse(...);
     Eeucjp::X ...;
     Eeucjp::X_;
     Eeucjp::glob(...);
@@ -3757,6 +3780,9 @@ Eeucjp - Run-time routines for EUCJP.pm
     Eeucjp::do(...);
     Eeucjp::require(...);
 
+    EUCJP::ord(...);
+    EUCJP::ord_;
+    EUCJP::reverse(...);
     EUCJP::length(...);
     EUCJP::substr(...);
     EUCJP::index(...);
@@ -3831,13 +3857,13 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 =item Transliteration
 
-  $tr = Eeucjp::tr($string,$searchlist,$replacementlist,$modifier);
-  $tr = Eeucjp::tr($string,$searchlist,$replacementlist);
+  $tr = Eeucjp::tr($variable,$bind_operator,$searchlist,$replacementlist,$modifier);
+  $tr = Eeucjp::tr($variable,$bind_operator,$searchlist,$replacementlist);
 
   This function scans a EUC-JP string character by character and replaces all
   occurrences of the characters found in $searchlist with the corresponding character
   in $replacementlist. It returns the number of characters replaced or deleted.
-  If no EUC-JP string is specified via =~ operator, the $_ string is translated.
+  If no EUC-JP string is specified via =~ operator, the $_ variable is translated.
   $modifier are:
 
   Modifier   Meaning
@@ -3896,17 +3922,17 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
   This is the internal function implementing the \U escape in double-quoted
   strings.
 
-=item Shift matched variables
+=item Make capture number
 
-  $dollar1 = Eeucjp::shift_matched_var();
+  $capturenumber = Eeucjp::capture($string);
 
-  This function is internal use to s/ / /.
+  This function is internal use to m/ /i, s/ / /i, split and qr/ /i.
 
 =item Make ignore case string
 
   @ignorecase = Eeucjp::ignorecase(@string);
 
-  This function is internal use to m/ /i, s/ / /i and qr/ /i.
+  This function is internal use to m/ /i, s/ / /i, split and qr/ /i.
 
 =item Make character
 
@@ -3916,33 +3942,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
   This function returns the character represented by that $code in the character
   set. For example, Eeucjp::chr(65) is "A" in either ASCII or EUC-JP, and
   Eeucjp::chr(0x82a0) is a EUC-JP HIRAGANA LETTER A. For the reverse of Eeucjp::chr,
-  use Eeucjp::ord.
-
-=item Order of Character
-
-  $ord = Eeucjp::ord($string);
-  $ord = Eeucjp::ord_;
-
-  This function returns the numeric value (ASCII or EUC-JP) of the first character
-  of $string. The return value is always unsigned.
-
-=item Reverse list or string
-
-  @reverse = Eeucjp::reverse(@list);
-  $reverse = Eeucjp::reverse(@list);
-
-  In list context, this function returns a list value consisting of the elements of
-  @list in the opposite order. The function can be used to create descending sequences:
-
-  for (Eeucjp::reverse(1 .. 10)) { ... }
-
-  Because of the way hashes flatten into lists when passed as a @list, reverse can also
-  be used to invert a hash, presuming the values are unique:
-
-  %barfoo = Eeucjp::reverse(%foobar);
-
-  In scalar context, the function concatenates all the elements of LIST and then returns
-  the reverse of that resulting string, character by character.
+  use EUCJP::ord.
 
 =item File test operator -X
 
@@ -4192,6 +4192,32 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
   it'll return true otherwise.
 
   See also do file.
+
+=item Order of Character
+
+  $ord = EUCJP::ord($string);
+  $ord = EUCJP::ord_;
+
+  This function returns the numeric value (ASCII or EUC-JP) of the first character
+  of $string. The return value is always unsigned.
+
+=item Reverse list or string
+
+  @reverse = EUCJP::reverse(@list);
+  $reverse = EUCJP::reverse(@list);
+
+  In list context, this function returns a list value consisting of the elements of
+  @list in the opposite order. The function can be used to create descending sequences:
+
+  for (EUCJP::reverse(1 .. 10)) { ... }
+
+  Because of the way hashes flatten into lists when passed as a @list, reverse can also
+  be used to invert a hash, presuming the values are unique:
+
+  %barfoo = EUCJP::reverse(%foobar);
+
+  In scalar context, the function concatenates all the elements of LIST and then returns
+  the reverse of that resulting string, character by character.
 
 =item length by EUC-JP character
 
