@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name: EUCJP
 abstract: Source code filter for EUC-JP script
-version: 0.41
+version: 0.42
 author:
   - INABA Hitoshi <ina@cpan.org>
 license: perl
