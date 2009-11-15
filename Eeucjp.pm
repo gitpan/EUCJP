@@ -11,7 +11,7 @@ use strict;
 use 5.00503;
 use vars qw($VERSION $_warning);
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.43 $ =~ m/(\d+)/xmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.44 $ =~ m/(\d+)/xmsg;
 
 use Fcntl;
 use Symbol;
@@ -173,6 +173,7 @@ sub Eeucjp::capture($);
 sub Eeucjp::ignorecase(@);
 sub Eeucjp::chr(;$);
 sub Eeucjp::chr_();
+sub Eeucjp::filetest(@);
 sub Eeucjp::r(;*@);
 sub Eeucjp::w(;*@);
 sub Eeucjp::x(;*@);
@@ -200,6 +201,7 @@ sub Eeucjp::B(;*@);
 sub Eeucjp::M(;*@);
 sub Eeucjp::A(;*@);
 sub Eeucjp::C(;*@);
+sub Eeucjp::filetest_(@);
 sub Eeucjp::r_();
 sub Eeucjp::w_();
 sub Eeucjp::x_();
@@ -1380,6 +1382,25 @@ sub Eeucjp::chr_() {
 }
 
 #
+# EUC-JP stacked file test expr
+#
+sub Eeucjp::filetest (@) {
+
+    my $file     = pop @_;
+    my $filetest = substr(pop @_, 1);
+
+    unless (eval qq{Eeucjp::$filetest(\$file)}) {
+        return '';
+    }
+    for my $filetest (reverse @_) {
+        unless (eval qq{ $filetest _ }) {
+            return '';
+        }
+    }
+    return 1;
+}
+
+#
 # EUC-JP file test -r expr
 #
 sub Eeucjp::r(;*@) {
@@ -2352,6 +2373,24 @@ sub Eeucjp::C(;*@) {
         }
     }
     return wantarray ? (undef,@_) : undef;
+}
+
+#
+# EUC-JP stacked file test $_
+#
+sub Eeucjp::filetest_ (@) {
+
+    my $filetest = substr(pop @_, 1);
+
+    unless (eval qq{Eeucjp::${filetest}_}) {
+        return '';
+    }
+    for my $filetest (reverse @_) {
+        unless (eval qq{ $filetest _ }) {
+            return '';
+        }
+    }
+    return 1;
 }
 
 #
