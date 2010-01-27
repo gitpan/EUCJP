@@ -3,6 +3,8 @@ package Eeucjp;
 #
 # Eeucjp - Run-time routines for EUCJP.pm
 #
+#                  http://search.cpan.org/dist/EUCJP/
+#
 # Copyright (c) 2008, 2009, 2010 INABA Hitoshi <ina@cpan.org>
 #
 ######################################################################
@@ -11,7 +13,7 @@ use strict;
 use 5.00503;
 use vars qw($VERSION $_warning);
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.47 $ =~ m/(\d+)/xmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.48 $ =~ m/(\d+)/xmsg;
 
 use Fcntl;
 use Symbol;
