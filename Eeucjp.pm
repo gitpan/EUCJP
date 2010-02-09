@@ -13,7 +13,7 @@ use strict;
 use 5.00503;
 use vars qw($VERSION $_warning);
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.48 $ =~ m/(\d+)/xmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.49 $ =~ m/(\d+)/xmsg;
 
 use Fcntl;
 use Symbol;
@@ -798,17 +798,17 @@ sub _charlist {
                 '\b' => "\x08", # \b means backspace in character class
                 '\a' => "\a",
                 '\e' => "\e",
-                '\d' => '\d',
-                '\s' => '\s',
-                '\w' => '\w',
-                '\D' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\d])',
-                '\S' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\s])',
-                '\W' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\w])',
+                '\d' => '[0-9]',
+                '\s' => '[\x09\x0A\x0C\x0D\x20]',
+                '\w' => '[0-9A-Z_a-z]',
+                '\D' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^0-9])',
+                '\S' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x09\x0A\x0C\x0D\x20])',
+                '\W' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^0-9A-Z_a-z])',
 
-                '\H' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\t\x20])',
-                '\V' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\f\n\r])',
-                '\h' => '[\t\x20]',
-                '\v' => '[\f\n\r]',
+                '\H' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x09\x20])',
+                '\V' => '(?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x0C\x0A\x0D])',
+                '\h' => '[\x09\x20]',
+                '\v' => '[\x0C\x0A\x0D]',
 
             }->{$1};
         }
