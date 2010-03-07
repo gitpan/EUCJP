@@ -9,25 +9,30 @@ package Eeucjp;
 #
 ######################################################################
 
-use strict;
+BEGIN {
+    eval { require 'strict.pm';   'strict'  ->import; };
+#   eval { require 'warnings.pm'; 'warnings'->import; };
+}
 use 5.00503;
-use vars qw($VERSION $_warning);
+BEGIN { eval q{ use vars qw($VERSION $_warning) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.49 $ =~ m/(\d+)/xmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.50 $ =~ m/(\d+)/xmsg;
 
 use Fcntl;
 use Symbol;
-use FindBin;
 
-use Carp qw(carp croak confess cluck verbose);
-local $SIG{__DIE__}  = sub { confess @_ } if exists $ENV{'SJIS_DEBUG'};
-local $SIG{__WARN__} = sub { cluck   @_ } if exists $ENV{'SJIS_DEBUG'};
+# instead of Carp.pm
+sub carp (@);
+sub croak (@);
+sub cluck (@);
+sub confess (@);
+
 $_warning = $^W; # push warning, warning on
 local $^W = 1;
 
 BEGIN {
     if ($^X =~ m/ jperl /oxmsi) {
-        croak "$0 need perl(not jperl) 5.00503 or later. (\$^X==$^X)";
+        die "$0 need perl(not jperl) 5.00503 or later. (\$^X==$^X)";
     }
 }
 
@@ -44,6 +49,14 @@ my $is_shiftjis_family = 0;
 my $is_eucjp_family    = 0;
 
 if (0) {
+}
+
+# Latin-1
+elsif (__PACKAGE__ eq 'Elatin1') {
+    %range_tr = (
+        1 => [ [0x00..0xFF],
+             ],
+    );
 }
 
 # EUC-JP
@@ -117,7 +130,7 @@ if ($^O =~ /\A (?: MSWin32 | NetWare | symbian | dos ) \z/oxms) {
             if (m/\A ' ((?:$q_char)*) ' \z/oxms) {
                 push @argv, $1;
             }
-            elsif (my @glob = Eeucjp::glob($_)) {
+            elsif (m/\A (?:$q_char)*? [*?] /oxms and (my @glob = Eeucjp::glob($_))) {
                 push @argv, @glob;
             }
             else {
@@ -495,6 +508,16 @@ sub Eeucjp::rindex($$;$) {
     sub Eeucjp::s_matched() {
         $last_s_matched = 1;
     }
+
+    # which operator matched at last
+
+    # $m_matched = qr'(?{$last_s_matched=0})';
+    # $s_matched = qr'(?{$last_s_matched=1})';
+
+    # following methods use neither '$' nor '=' in regrxp
+    BEGIN { eval q{ use vars qw($m_matched $s_matched) } }
+    $m_matched = qr'(?{Eeucjp::m_matched})';
+    $s_matched = qr'(?{Eeucjp::s_matched})';
 }
 
 #
@@ -1499,6 +1522,53 @@ sub EUCJP::rindex($$;$) {
     else {
         return EUCJP::length(CORE::substr $_[0], 0, $rindex);
     }
+}
+
+#
+# instead of Carp::carp
+#
+sub carp (@) {
+    my($package,$filename,$line) = caller(1);
+    print STDERR "@_ at $filename line $line.\n";
+}
+
+#
+# instead of Carp::croak
+#
+sub croak (@) {
+    my($package,$filename,$line) = caller(1);
+    print STDERR "@_ at $filename line $line.\n";
+    die "\n";
+}
+
+#
+# instead of Carp::cluck
+#
+sub cluck (@) {
+    my $i = 0;
+    my @cluck = ();
+    while (my($package,$filename,$line,$subroutine) = caller($i)) {
+        push @cluck, "[$i] $filename($line) $package::$subroutine\n";
+        $i++;
+    }
+    print STDERR reverse @cluck;
+    print STDERR "\n";
+    carp @_;
+}
+
+#
+# instead of Carp::confess
+#
+sub confess (@) {
+    my $i = 0;
+    my @confess = ();
+    while (my($package,$filename,$line,$subroutine) = caller($i)) {
+        push @confess, "[$i] $filename($line) $package::$subroutine\n";
+        $i++;
+    }
+    print STDERR reverse @confess;
+    print STDERR "\n";
+    croak @_;
 }
 
 # pop warning
