@@ -9,17 +9,67 @@ package Eeucjp;
 #
 ######################################################################
 
-BEGIN {
-    eval { require 'strict.pm';   'strict'  ->import; };
-#   eval { require 'warnings.pm'; 'warnings'->import; };
-}
 use 5.00503;
+
+# 12.3. Delaying use Until Runtime
+# in Chapter 12. Packages, Libraries, and Modules
+# of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
+# (and so on)
+
 BEGIN { eval q{ use vars qw($VERSION $_warning) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.51 $ =~ m/(\d+)/xmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.52 $ =~ m/(\d+)/xmsg;
 
-use Fcntl;
-use Symbol;
+# poor Symbol.pm - substitute of real Symbol.pm
+BEGIN {
+    my $genpkg = "Symbol::";
+    my $genseq = 0;
+
+    sub gensym () {
+        my $name = "GEN" . $genseq++;
+        my $ref = \*{$genpkg . $name};
+        delete $$genpkg{$name};
+        $ref;
+    }
+
+    sub qualify ($;$) {
+        my ($name) = @_;
+        if (!ref($name) && (Eeucjp::index($name, '::') == -1) && (Eeucjp::index($name, "'") == -1)) {
+            my $pkg;
+            my %global = map {$_ => 1} qw(ARGV ARGVOUT ENV INC SIG STDERR STDIN STDOUT);
+
+            # Global names: special character, "^xyz", or other.
+            if ($name =~ /^(([^a-z])|(\^[a-z_]+))\z/i || $global{$name}) {
+                # RGS 2001-11-05 : translate leading ^X to control-char
+                $name =~ s/^\^([a-z_])/'qq(\c'.$1.')'/eei;
+                $pkg = "main";
+            }
+            else {
+                $pkg = (@_ > 1) ? $_[1] : caller;
+            }
+            $name = $pkg . "::" . $name;
+        }
+        $name;
+    }
+
+    sub qualify_to_ref ($;$) {
+        return \*{ qualify $_[0], @_ > 1 ? $_[1] : caller };
+    }
+}
+
+BEGIN {
+    eval { require strict;   'strict'  ->import; };
+#   eval { require warnings; 'warnings'->import; };
+}
+
+# P.714 29.2.39. flock
+# in Chapter 29: Functions
+# of ISBN 0-596-00027-8 Programming Perl Third Edition.
+
+sub LOCK_SH() {1}
+sub LOCK_EX() {2}
+sub LOCK_UN() {8}
+sub LOCK_NB() {4}
 
 # instead of Carp.pm
 sub carp (@);
@@ -238,6 +288,10 @@ sub Eeucjp::split(;$$$) {
 
         if ((not defined $pattern) or ($pattern eq ' ')) {
             $string =~ s/ \A \s+ //oxms;
+
+            # P.1024 Appendix W.10 Multibyte Processing
+            # of ISBN 1-56592-224-7 CJKV Information Processing
+            # (and so on)
 
             # the //m modifier is assumed when you split on the pattern /^/
             # (and so on)
@@ -488,6 +542,10 @@ sub Eeucjp::rindex($$;$) {
 # EUC-JP regexp capture
 #
 {
+    # 10.3. Creating Persistent Private Variables
+    # in Chapter 10. Subroutines
+    # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
+
     my $last_s_matched = 0;
 
     sub Eeucjp::capture($) {
@@ -509,15 +567,14 @@ sub Eeucjp::rindex($$;$) {
         $last_s_matched = 1;
     }
 
-    # which operator matched at last
+    # which matched of m// or s/// at last
 
-    # $m_matched = qr'(?{$last_s_matched=0})';
-    # $s_matched = qr'(?{$last_s_matched=1})';
+    # P.854 31.17. use re
+    # in Chapter 31. Pragmatic Modules
+    # of ISBN 0-596-00027-8 Programming Perl Third Edition.
 
-    # following methods use neither '$' nor '=' in regrxp
-    BEGIN { eval q{ use vars qw($m_matched $s_matched) } }
-    $m_matched = qr'(?{Eeucjp::m_matched})';
-    $s_matched = qr'(?{Eeucjp::s_matched})';
+    @Eeucjp::m_matched = (qr/(?{Eeucjp::m_matched})/);
+    @Eeucjp::s_matched = (qr/(?{Eeucjp::s_matched})/);
 }
 
 #

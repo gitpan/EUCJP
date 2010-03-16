@@ -9,18 +9,43 @@ package EUCJP;
 #
 ######################################################################
 
-BEGIN {
-    eval { require 'strict.pm';   'strict'  ->import; };
-#   eval { require 'warnings.pm'; 'warnings'->import; };
-}
 use 5.00503;
 use Eeucjp;
+
+# 12.3. Delaying use Until Runtime
+# in Chapter 12. Packages, Libraries, and Modules
+# of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
+# (and so on)
+
 BEGIN { eval q{ use vars qw($VERSION) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.51 $ =~ m/(\d+)/oxmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.52 $ =~ m/(\d+)/oxmsg;
 
-use Fcntl qw(:DEFAULT :flock);
-use Symbol;
+# poor Symbol.pm - substitute of real Symbol.pm
+BEGIN {
+    my $genpkg = "Symbol::";
+    my $genseq = 0;
+    sub gensym () {
+        my $name = "GEN" . $genseq++;
+        my $ref = \*{$genpkg . $name};
+        delete $$genpkg{$name};
+        $ref;
+    }
+}
+
+BEGIN {
+    eval { require strict;   'strict'  ->import; };
+#   eval { require warnings; 'warnings'->import; };
+}
+
+# P.714 29.2.39. flock
+# in Chapter 29: Functions
+# of ISBN 0-596-00027-8 Programming Perl Third Edition.
+
+sub LOCK_SH() {1}
+sub LOCK_EX() {2}
+sub LOCK_UN() {8}
+sub LOCK_NB() {4}
 
 local $^W = 1;
 
@@ -126,9 +151,13 @@ my $q_angle    = qr{(?{local $nest=0}) (?>(?:
                              \>  (?(?{$nest>0})(?{$nest--})|(?!)))*) (?(?{$nest!=0})(?!))
                  }xms;
 
-my $use_re_eval = qq{use re 'eval';\n};
-my $m_matched   = '(?{Eeucjp::m_matched})';
-my $s_matched   = '(?{Eeucjp::s_matched})';
+# P.854 31.17. use re
+# in Chapter 31. Pragmatic Modules
+# of ISBN 0-596-00027-8 Programming Perl Third Edition.
+
+my $use_re_eval = qq{};
+my $m_matched   = q{@Eeucjp::m_matched};
+my $s_matched   = q{@Eeucjp::s_matched};
 
 my $tr_variable   = '';   # variable of tr///
 my $sub_variable  = '';   # variable of s///
@@ -433,9 +462,15 @@ my $e_mtime   = (stat("$filename.e"))[9];
 my $mtime     = (stat($filename))[9];
 my $__mtime__ = (stat($__FILE__))[9];
 if ((not -e("$filename.e")) or ($e_mtime < $mtime) or ($mtime < $__mtime__)) {
-    my $fh = Symbol::gensym();
-    sysopen($fh, "$filename.e", O_WRONLY | O_TRUNC | O_CREAT) or die "$__FILE__: Can't write open file: $filename.e";
+    my $fh = gensym();
+    open($fh, ">$filename.e") or die "$__FILE__: Can't write open file: $filename.e";
     if (exists $ENV{'SJIS_NONBLOCK'}) {
+
+        # 7.18. Locking a File
+        # in Chapter 7. File Access
+        # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
+        # (and so on)
+
         eval q{
             unless (flock($fh, LOCK_EX | LOCK_NB)) {
                 warn "$__FILE__: Can't immediately write-lock the file: $filename.e";
@@ -462,8 +497,8 @@ if ((not -e("$filename.e")) or ($e_mtime < $mtime) or ($mtime < $__mtime__)) {
 # local $ENV{'PATH'} = '.';
 local @ENV{qw(IFS CDPATH ENV BASH_ENV)};
 
-my $fh = Symbol::gensym();
-sysopen($fh, "$filename.e", O_RDONLY) or die "$__FILE__: Can't read open file: $filename.e";
+my $fh = gensym();
+open($fh, "$filename.e") or die "$__FILE__: Can't read open file: $filename.e";
 if (exists $ENV{'SJIS_NONBLOCK'}) {
     eval q{
         unless (flock($fh, LOCK_SH | LOCK_NB)) {
@@ -476,7 +511,7 @@ else {
     eval q{ flock($fh, LOCK_SH) };
 }
 
-# DOS like system
+# DOS-like system
 if ($^O =~ /\A (?: MSWin32 | NetWare | symbian | dos ) \z/oxms) {
     exit system map {m/ $your_gap [ ] /oxms ? qq{"$_"} : $_} $^X, "$filename.e", @ARGV;
 }
@@ -499,8 +534,8 @@ sub EUCJP::escape_script {
     my $e_script = '';
 
     # read EUC-JP script
-    my $fh = Symbol::gensym();
-    sysopen($fh, $script, O_RDONLY) or die "$__FILE__: Can't open file: $script";
+    my $fh = gensym();
+    open($fh, $script) or die "$__FILE__: Can't open file: $script";
     local $/ = undef; # slurp mode
     $_ = <$fh>;
     close($fh) or die "$__FILE__: Can't close file: $script";
@@ -517,11 +552,18 @@ sub EUCJP::escape_script {
             $e_script .= $head;
         }
 
+        # DOS-like system header
+        if (s/\A(\@rem\s*=\s*'.*?'\s*;\s*\n)//oms) {
+            my $head = $1;
+            $head =~ s/\bjperl\b/perl/gi;
+            $e_script .= $head;
+        }
+
         # P.618 Generating Perl in Other Languages
         # in Chapter 24: Common Practices
         # of ISBN 0-596-00027-8 Programming Perl Third Edition.
 
-        if (m/(.*^#\s*line\s+\d+(?:\s+"(?:$q_char)+?")?\s*\n)/omsgc) {
+        if (s/(.*^#\s*line\s+\d+(?:\s+"(?:$q_char)+?")?\s*\n)//oms) {
             my $head = $1;
             $head =~ s/\bjperl\b/perl/gi;
             $e_script .= $head;
@@ -2547,6 +2589,36 @@ sub e_qr {
             (?:$q_char)
     )}oxmsg;
 
+    # choice again delimiter
+    if ($delimiter =~ m/ [\@:] /oxms) {
+        my %octet = map {$_ => 1} @char;
+        if (not $octet{')'}) {
+            $delimiter     = '(';
+            $end_delimiter = ')';
+        }
+        elsif (not $octet{'}'}) {
+            $delimiter     = '{';
+            $end_delimiter = '}';
+        }
+        elsif (not $octet{']'}) {
+            $delimiter     = '[';
+            $end_delimiter = ']';
+        }
+        elsif (not $octet{'>'}) {
+            $delimiter     = '<';
+            $end_delimiter = '>';
+        }
+        else {
+            for my $char (qw( ! " $ % & * + - . / = ? ^ ` | ~ ), "\x00".."\x1F", "\x7F", "\xFF") {
+                if (not $octet{$char}) {
+                    $delimiter     = $char;
+                    $end_delimiter = $char;
+                    last;
+                }
+            }
+        }
+    }
+
     # unescape character
     for (my $i=0; $i <= $#char; $i++) {
         if (0) {
@@ -2609,7 +2681,7 @@ sub e_qr {
         }
 
         # /i modifier
-        elsif ($char[$i] =~ m/\A ([A-Za-z]) \z/oxms) {
+        elsif ($char[$i] =~ m/\A [A-Za-z] \z/oxms) {
         }
 
         # $0 --> $0
@@ -2733,8 +2805,8 @@ sub e_qr_q {
         }
 
         # escape $ @ / and \
-        elsif ($char[$i] =~ m{\A ([$@/\\]) \z}oxms) {
-            $char[$i] = '\\' . $1;
+        elsif ($char[$i] =~ m{\A [$@/\\] \z}oxms) {
+            $char[$i] = '\\' . $char[$i];
         }
 
         # rewrite character class or escape character
@@ -2743,7 +2815,7 @@ sub e_qr_q {
         }
 
         # /i modifier
-        elsif ($char[$i] =~ m/\A ([A-Za-z]) \z/oxms) {
+        elsif ($char[$i] =~ m/\A [A-Za-z] \z/oxms) {
         }
 
         # quote character before ? + * {
@@ -2791,6 +2863,36 @@ sub e_s1 {
         \(\?                                    |
             (?:$q_char)
     )}oxmsg;
+
+    # choice again delimiter
+    if ($delimiter =~ m/ [\@:] /oxms) {
+        my %octet = map {$_ => 1} @char;
+        if (not $octet{')'}) {
+            $delimiter     = '(';
+            $end_delimiter = ')';
+        }
+        elsif (not $octet{'}'}) {
+            $delimiter     = '{';
+            $end_delimiter = '}';
+        }
+        elsif (not $octet{']'}) {
+            $delimiter     = '[';
+            $end_delimiter = ']';
+        }
+        elsif (not $octet{'>'}) {
+            $delimiter     = '<';
+            $end_delimiter = '>';
+        }
+        else {
+            for my $char (qw( ! " $ % & * + - . / = ? ^ ` | ~ ), "\x00".."\x1F", "\x7F", "\xFF") {
+                if (not $octet{$char}) {
+                    $delimiter     = $char;
+                    $end_delimiter = $char;
+                    last;
+                }
+            }
+        }
+    }
 
     # count '('
     my $parens = grep { $_ eq '(' } @char;
@@ -2857,7 +2959,7 @@ sub e_s1 {
         }
 
         # /i modifier
-        elsif ($char[$i] =~ m/\A ([A-Za-z]) \z/oxms) {
+        elsif ($char[$i] =~ m/\A [A-Za-z] \z/oxms) {
         }
 
         # \0 --> \0
@@ -3016,8 +3118,8 @@ sub e_s1_q {
         }
 
         # escape $ @ / and \
-        elsif ($char[$i] =~ m{\A ([$@/\\]) \z}oxms) {
-            $char[$i] = '\\' . $1;
+        elsif ($char[$i] =~ m{\A [$@/\\] \z}oxms) {
+            $char[$i] = '\\' . $char[$i];
         }
 
         # rewrite character class or escape character
@@ -3026,7 +3128,7 @@ sub e_s1_q {
         }
 
         # /i modifier
-        elsif ($char[$i] =~ m/\A ([A-Za-z]) \z/oxms) {
+        elsif ($char[$i] =~ m/\A [A-Za-z] \z/oxms) {
         }
 
         # quote character before ? + * {
@@ -3050,7 +3152,18 @@ sub e_s2_q {
 
     $slash = 'div';
 
-    return join '', $ope, $delimiter, $string, $end_delimiter;
+    my @char = $string =~ m/ \G ([$@\/\\]|$q_char) /oxmsg;
+    for (my $i=0; $i <= $#char; $i++) {
+        if (0) {
+        }
+
+        # escape $ @ / and \
+        elsif ($char[$i] =~ m{\A [$@/\\] \z}oxms) {
+            $char[$i] = '\\' . $char[$i];
+        }
+    }
+
+    return join '', $ope, $delimiter, @char,   $end_delimiter;
 }
 
 #
@@ -3123,53 +3236,66 @@ sub e_sub {
         }
     }
 
+    my $local = '';
+    if ($variable_basename =~ /::/) {
+        $local = 'local';
+    }
+    else{
+        $local = 'my';
+    }
+
     # s///g
     my $sub;
     if ($modifier =~ m/g/oxms) {
-        $sub = sprintf(
-            #         1          2              3 4 5      6         7   8 9   10      11           12          13      14     15          16       17    18      19
-            q<eval{my %s_n=0; my %s_a=''; while(%s%s%s){my %s_r=eval %s; %s%s="%s_a${1}%s_r$'"; pos(%s)=length "%s_a${1}%s_r"; %s_a=substr(%s,0,pos(%s)); %s_n++} %s_n}>,
 
-                $variable_basename,                                                       #  1
+        $sub = sprintf(
+            #      1  2       3  4              5 6 7   8  9         10  1112  13      14           15          16      17     18          19       20    21      22
+            q<eval{%s %s_n=0; %s %s_a=''; while(%s%s%s){%s %s_r=eval %s; %s%s="%s_a${1}%s_r$'"; pos(%s)=length "%s_a${1}%s_r"; %s_a=substr(%s,0,pos(%s)); %s_n++} %s_n}>,
+
+            $local,                                                                       #  1
                 $variable_basename,                                                       #  2
-            $variable,                                                                    #  3
-            $bind_operator,                                                               #  4
-            ($delimiter1 eq "'") ?                                                        #  5
+            $local,                                                                       #  3
+                $variable_basename,                                                       #  4
+            $variable,                                                                    #  5
+            $bind_operator,                                                               #  6
+            ($delimiter1 eq "'") ?                                                        #  7
             e_s1_q('m', $delimiter1, $end_delimiter1, $pattern, $modifier) :              #  :
             e_s1  ('m', $delimiter1, $end_delimiter1, $pattern, $modifier),               #  :
-                $variable_basename,                                                       #  6
-            $e_replacement,                                                               #  7
-            sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, #  8
-            $variable,                                                                    #  9
-                $variable_basename,                                                       # 10
-                $variable_basename,                                                       # 11
+            $local,                                                                       #  8
+                $variable_basename,                                                       #  9
+            $e_replacement,                                                               # 10
+            sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, # 11
             $variable,                                                                    # 12
                 $variable_basename,                                                       # 13
                 $variable_basename,                                                       # 14
-                $variable_basename,                                                       # 15
-            $variable,                                                                    # 16
-            $variable,                                                                    # 17
+            $variable,                                                                    # 15
+                $variable_basename,                                                       # 16
+                $variable_basename,                                                       # 17
                 $variable_basename,                                                       # 18
-                $variable_basename,                                                       # 19
+            $variable,                                                                    # 19
+            $variable,                                                                    # 20
+                $variable_basename,                                                       # 21
+                $variable_basename,                                                       # 22
         );
     }
 
     # s///
     else {
         $sub = sprintf(
-            #  1 2 3             4         5   6 7       8
-            q<(%s%s%s) ? eval{my %s_r=eval %s; %s%s="${1}%s_r$'"; 1 } : ''>,
+            #  1 2 3          4  5         6   7 8       9
+            q<(%s%s%s) ? eval{%s %s_r=eval %s; %s%s="${1}%s_r$'"; 1 } : ''>,
 
             $variable,                                                                    # 1
             $bind_operator,                                                               # 2
             ($delimiter1 eq "'") ?                                                        # 3
             e_s1_q('m', $delimiter1, $end_delimiter1, $pattern, $modifier) :              # :
             e_s1  ('m', $delimiter1, $end_delimiter1, $pattern, $modifier),               # :
-                $variable_basename,                                                       # 4
-            $e_replacement,                                                               # 5
-            sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, # 6
-            $variable,                                                                    # 7
-                $variable_basename,                                                       # 8
+            $local,                                                                       # 4
+                $variable_basename,                                                       # 5
+            $e_replacement,                                                               # 6
+            sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, # 7
+            $variable,                                                                    # 8
+                $variable_basename,                                                       # 9
         );
     }
 
@@ -3474,8 +3600,17 @@ EUCJP - "Yet Another JPerl" Source code filter to escape EUC-JP
 Let's start with a bit of history: jperl 4.019+1.3 introduced EUC-JP support.
 You could apply chop() and regexps even to complex CJK characters.
 
-Since Perl5.8, Encode module is supported for multilingual processing, and it is
-said that jperl became unnecessary. But is it really so?
+JPerl in CPAN Perl Ports (Binary Distributions)
+
+http://www.cpan.org/ports/index.html#jperl
+
+said,
+
+  As of Perl 5.8.0 it is suggested that instead of JPerl (which is
+  based on a quite old release of Perl) you should just use Perl 5.8.0,
+  since it can do all that JPerl did, and more.
+
+But is it really so?
 
 In this country, EUC-JP is widely used on mainframe I/O, the personal computer,
 and the cellular phone. This software treats EUC-JP directly. Therefor there is
@@ -3491,9 +3626,9 @@ better, fitter EUCJP.
 
 Now, the last version of JPerl is 5.005_04 and is not maintained now.
 
-Japanization modifier Hirofumi Watanabe said,
+Japanization modifier WATANABE Hirofumi said,
 
-  "Because Watanabe am tired I give over maintaing JPerl."
+  "Because WATANABE am tired I give over maintaing JPerl."
 
 at Slide #15: "The future of JPerl" of
 
@@ -3516,13 +3651,13 @@ What's this software good for ...
 
 =item * Possible to handle raw EUC-JP values
 
-=item * Possible to re-use past data, past code and how to
+=item * Backward compatibility of data, script and how to
 
-=item * No UTF8 flag, perlunitut, perluniadvice
-
-=item * But Perl5 compatible
+=item * No UTF8 flag, perlunitut and perluniadvice
 
 =item * No C programming (for maintain JPerl)
+
+=item * Independent from binary file (CPU, OS, perl version, 32bit/64bit)
 
 =back
 
@@ -3563,6 +3698,7 @@ I am glad that I could confirm my idea is not so wrong.
    perl58.bat       --- find and run perl5.8  without %PATH% settings
    perl510.bat      --- find and run perl5.10 without %PATH% settings
    perl512.bat      --- find and run perl5.12 without %PATH% settings
+   perl64.bat       --- find and run perl64   without %PATH% settings
 
 =head1 CHARACTER CLASSES
 
@@ -3939,16 +4075,23 @@ It is impossible. Because the following time is necessary.
 Perl should remain one language, rather than forking into a
 byte-oriented Perl and a character-oriented Perl.
 
+JPerl forked the perl interpreter so as not to fork the Perl language.
+But the Perl core team might not hope for the perl interpreter's
+divergence.
+
 A character-oriented Perl is not necessary to make it specially,
 because a byte-oriented Perl can already treat the binary data.
 This software is only an application program of Perl, a filter program.
 If perl can be executed, this software will be able to be executed.
 
+And when you solve the problem by the perl script, the perl community
+will support you.
+
 =item Goal #5:
 
 JPerl users will be able to maintain JPerl by Perl.
 
---- maybe.
+--- maybe, and sure.
 
 =back
 
@@ -4111,9 +4254,9 @@ I am thankful to all persons.
  SUZUKI Norio, Jperl
  http://homepage2.nifty.com/kipp/perl/jperl/
 
- Hirofumi Watanabe, Jperl
+ WATANABE Hirofumi, Jperl
  http://search.cpan.org/~watanabe/
- http://mail.pm.org/pipermail/tokyo-pm/1999-September/001854.html
+ ftp://ftp.oreilly.co.jp/pcjp98/watanabe/jperlconf.ppt
 
  Dan Kogai, Encode module
  http://search.cpan.org/dist/Encode/
@@ -4123,6 +4266,23 @@ I am thankful to all persons.
 
  Tokyo-pm archive
  http://mail.pm.org/pipermail/tokyo-pm/
+ http://mail.pm.org/pipermail/tokyo-pm/1999-September/001844.html
+ http://mail.pm.org/pipermail/tokyo-pm/1999-September/001854.html
+
+ ruby-list
+ http://blade.nagaokaut.ac.jp/ruby/ruby-list/index.shtml
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/2440
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/2446
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/2569
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/9427
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/9431
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/10500
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/10501
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/10502
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/12385
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/12392
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/12393
+ http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/19156
 
 =cut
 
