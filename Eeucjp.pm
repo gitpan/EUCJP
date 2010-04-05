@@ -18,7 +18,7 @@ use 5.00503;
 
 BEGIN { eval q{ use vars qw($VERSION $_warning) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.52 $ =~ m/(\d+)/xmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.54 $ =~ m/(\d+)/xmsg;
 
 # poor Symbol.pm - substitute of real Symbol.pm
 BEGIN {
@@ -138,6 +138,20 @@ elsif (__PACKAGE__ eq 'Eutf2') {
         4 => [ [0xF0..0xF0],[0x90..0xBF],[0x80..0xBF],[0x80..0xBF],
                [0xF1..0xF3],[0x80..0xBF],[0x80..0xBF],[0x80..0xBF],
                [0xF4..0xF4],[0x80..0x8F],[0x80..0xBF],[0x80..0xBF],
+             ],
+    );
+}
+
+# Old UTF-8
+elsif (__PACKAGE__ eq 'Eoldutf8') {
+    %range_tr = (
+        1 => [ [0x00..0x7F],
+             ],
+        2 => [ [0xC0..0xDF],[0x80..0xBF],
+             ],
+        3 => [ [0xE0..0xEF],[0x80..0xBF],[0x80..0xBF],
+             ],
+        4 => [ [0xF0..0xF4],[0x80..0xBF],[0x80..0xBF],[0x80..0xBF],
              ],
     );
 }
@@ -552,9 +566,7 @@ sub Eeucjp::rindex($$;$) {
         if ($last_s_matched and ($_[0] =~ m/\A [1-9][0-9]* \z/oxms)) {
             return $_[0] + 1;
         }
-        else {
-            return $_[0];
-        }
+        return $_[0];
     }
 
     # EUC-JP regexp mark last m// or qr// matched
@@ -982,9 +994,16 @@ sub _charlist {
         }
 
         # /i modifier
-        elsif ($char[$i] =~ m/\A [A-Za-z] \z/oxms) {
+        elsif ($char[$i] =~ m/\A [\x00-\xFF] \z/oxms) {
             if ($modifier =~ m/i/oxms) {
-                push @singleoctet, CORE::uc $char[$i], CORE::lc $char[$i];
+                my $uc = uc($char[$i]);
+                my $lc = lc($char[$i]);
+                if ($uc ne $lc) {
+                    push @singleoctet, $uc, $lc;
+                }
+                else {
+                    push @singleoctet, $char[$i];
+                }
             }
             else {
                 push @singleoctet, $char[$i];
@@ -1033,11 +1052,6 @@ sub _charlist {
         }
         elsif (m/\A [\x00-\xFF] \z/oxms) {
             $_ = quotemeta $_;
-        }
-    }
-    for (@charlist) {
-        if (m/\A (\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE]) ([\x00-\xFF]) \z/oxms) {
-            $_ = $1 . quotemeta $2;
         }
     }
 
@@ -1324,37 +1338,21 @@ OUTER:
 
         my $pattern = '';
         while ($expr =~ m/ \G ($q_char) /oxgc) {
-            $pattern .= {
-                '*' => "(?:$your_char)*",
-                '?' => "(?:$your_char)?",  # DOS style
-            #   '?' => "(?:$your_char)",   # UNIX style
-                'a' => 'A',
-                'b' => 'B',
-                'c' => 'C',
-                'd' => 'D',
-                'e' => 'E',
-                'f' => 'F',
-                'g' => 'G',
-                'h' => 'H',
-                'i' => 'I',
-                'j' => 'J',
-                'k' => 'K',
-                'l' => 'L',
-                'm' => 'M',
-                'n' => 'N',
-                'o' => 'O',
-                'p' => 'P',
-                'q' => 'Q',
-                'r' => 'R',
-                's' => 'S',
-                't' => 'T',
-                'u' => 'U',
-                'v' => 'V',
-                'w' => 'W',
-                'x' => 'X',
-                'y' => 'Y',
-                'z' => 'Z',
-            }->{$1} || quotemeta $1;
+            my $char = $1;
+            my $uc = uc($char);
+            if ($uc ne $char) {
+                $pattern .= $uc;
+            }
+            elsif ($char eq '*') {
+                $pattern .= "(?:$your_char)*",
+            }
+            elsif ($char eq '?') {
+                $pattern .= "(?:$your_char)?",  # DOS style
+#               $pattern .= "(?:$your_char)",   # UNIX style
+            }
+            else {
+                $pattern .= quotemeta $char;
+            }
         }
         my $matchsub = sub { uc($_[0]) =~ m{\A $pattern \z}xms };
 
