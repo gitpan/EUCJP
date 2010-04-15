@@ -19,7 +19,7 @@ use Eeucjp;
 
 BEGIN { eval q{ use vars qw($VERSION) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.54 $ =~ m/(\d+)/oxmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.55 $ =~ m/(\d+)/oxmsg;
 
 # poor Symbol.pm - substitute of real Symbol.pm
 BEGIN {
@@ -851,8 +851,8 @@ sub escape {
         return 'while ($_ = Eeucjp::glob';
     }
 
-# doit if, doit unless, doit while, doit until, doit for
-    elsif (m{\G \b ( if | unless | while | until | for ) \b }oxgc) { $slash = 'm//'; return $1;  }
+# doit if, doit unless, doit while, doit until, doit for, doit when
+    elsif (m{\G \b ( if | unless | while | until | for | when ) \b }oxgc) { $slash = 'm//'; return $1;  }
 
 # functions of package Eeucjp
     elsif (m{\G \b (CORE::(?:split|chop|index|rindex|lc|uc|chr|ord|reverse)) \b }oxgc) { $slash = 'm//'; return $1;    }
@@ -1744,6 +1744,7 @@ sub escape {
             %= | % |
             &&= | && | &= | & |
             -= | -> | - |
+            :\s*= |
             : |
             <<= | <=> | <= | < |
             == | => | =~ | = |
@@ -2230,6 +2231,7 @@ E_STRING_LOOP:
             %= | % |
             &&= | && | &= | & |
             -= | -> | - |
+            :\s*= |
             : |
             <<= | <=> | <= | < |
             == | => | =~ | = |
@@ -3686,6 +3688,8 @@ What's this software good for ...
 
 =item * Backward compatibility of data, script and how to
 
+=item * Only EUCJP.pm and Eeucjp.pm, other modules are unnecessary
+
 =item * No UTF8 flag, perlunitut and perluniadvice
 
 =item * No C programming (for maintain JPerl)
@@ -4215,6 +4219,13 @@ programming environment like at that time.
  http://www.oreilly.com/catalog/regex3/index.html
  ISBN 978-4-87311-359-3
  http://www.oreilly.co.jp/books/9784873113593/
+
+ Regular Expressions Cookbook
+ By Jan Goyvaerts, Steven Levithan
+ May 2009
+ Pages: 512
+ ISBN 10:0-596-52068-9 | ISBN 13: 978-0-596-52068-7
+ http://oreilly.com/catalog/9780596520694/
 
  PERL PUROGURAMINGU
  Larry Wall, Randal L.Schwartz, Yoshiyuki Kondo
