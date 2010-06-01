@@ -17,9 +17,9 @@ use Eeucjp;
 # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
 # (and so on)
 
-BEGIN { eval q{ use vars qw($VERSION) } }
+BEGIN { eval q{ use vars qw($VERSION $_warning) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.56 $ =~ m/(\d+)/oxmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.57 $ =~ m/(\d+)/oxmsg;
 
 # poor Symbol.pm - substitute of real Symbol.pm
 BEGIN {
@@ -47,6 +47,7 @@ sub LOCK_EX() {2}
 sub LOCK_UN() {8}
 sub LOCK_NB() {4}
 
+$_warning = $^W; # push warning, warning on
 local $^W = 1;
 
 # P.707 29.2.33. exec
@@ -189,250 +190,13 @@ my $ignore_modules = join('|', qw(
     I18N::Collate
     I18N::JExt
     File::DosGlob
+    Wild
     Wildcard
     Japanese
 ));
 
 # in Chapter 8: Standard Modules
 # of ISBN 0-596-00241-6 Perl in a Nutshell, Second Edition
-
-my $standard_modules = join('|', qw(
-    AnyDBM_File
-    Attribute::Handlers
-    attributes
-    attrs
-    AutoLoader
-    AutoSplit
-    autouse
-    B
-    B::Asmdata
-    B::Assembler
-    B::Bblock
-    B::Bytecode
-    B::C
-    B::CC
-    B::Concise
-    B::Debug
-    B::Deparse
-    B::Disassembler
-    B::Lint
-    B::Showlex
-    B::Stackobj
-    B::Terse
-    B::Xref
-    base
-    Benchmark
-    bigint
-    bignum
-    bigrat
-    blib
-    bytes
-    ByteLoader
-    Carp
-    CGI
-    CGI::Apache
-    CGI::Carp
-    CGI::Cookie
-    CGI::Fast
-    CGI::Pretty
-    CGI::Push
-    CGI::Switch
-    charnames
-    Class::ISA
-    Class::Struct
-    Config
-    constant
-    CPAN
-    CPAN::FirstTime
-    CPAN::Nox
-    Cwd
-    Data::Dumper
-    DB
-    DB_File
-    Devel::DProf
-    Devel::PPPort
-    Devel::SelfStubber
-    diagnostics
-    Digest
-    Digest::MD5
-    DirHandle
-    Dumpvalue
-    DynaLoader
-    encoding
-    English
-    Env
-    Errno
-    Exporter
-    ExtUtils::Command
-    ExtUtils::Command::MM
-    ExtUtils::Constant
-    ExtUtils::Embed
-    ExtUtils::Install
-    ExtUtils::Installed
-    ExtUtils::Liblist
-    ExtUtils::MakeMaker
-    ExtUtils::Manifest
-    ExtUtils::Miniperl
-    ExtUtils::Mkbootstrap
-    ExtUtils::Mksymlists
-    ExtUtils::MM
-    ExtUtils::MM_Any
-    ExtUtils::MM_BeOS
-    ExtUtils::MM_DOS
-    ExtUtils::MM_NW5
-    ExtUtils::MM_OS2
-    ExtUtils::MM_Unix
-    ExtUtils::MM_UWIN
-    ExtUtils::MM_VMS
-    ExtUtils::MM_Win32
-    ExtUtils::MY
-    ExtUtils::Packlist
-    ExtUtils::testlib
-    Fatal
-    Fcntl
-    fields
-    File::Basename
-    File::CheckTree
-    File::Compare
-    File::Copy
-    File::DosGlob
-    File::Find
-    File::Path
-    File::Spec
-    File::Spec::Cygwin
-    File::Spec::Mac
-    File::Spec::OS2
-    File::Spec::Unix
-    File::Spec::VMS
-    File::Spec::Win32
-    File::stat
-    File::Temp
-    FileCache
-    FileHandle
-    Filter::Simple 
-    Filter::Util::Call
-    FindBin
-    GDBM_File
-    Getopt::Long
-    Getopt::Std
-    Hash::Util
-    I18N::Collate
-    I18N::Langinfo
-    I18N::LangTags
-    I18N::LangTags::List
-    if
-    integer
-    IO
-    IO::File
-    IO::Handle
-    IO::Pipe
-    IO::Seekable
-    IO::Select
-    IO::Socket
-    IPC::Msg
-    IPC::Open2
-    IPC::Open3
-    IPC::Semaphore
-    IPC::SysV
-    less
-    lib
-    List::Util
-    locale
-    Math::BigFloat
-    Math::BigInt
-    Math::BigInt::Calc
-    Math::BigRat
-    Math::Complex
-    Math::Trig
-    MIME::Base64
-    MIME::QuotedPrint
-    NDBM_File
-    Net::Cmd
-    Net::Config
-    Net::Domain
-    Net::FTP
-    Net::hostent
-    Net::netent
-    Net::Netrc
-    Net::NNTP
-    Net::Ping
-    Net::POP3
-    Net::protoent
-    Net::servent
-    Net::SMTP
-    Net::Time
-    O
-    ODBM_File
-    Opcode
-    ops
-    overload
-    PerlIO
-    PerlIO::Scalar
-    PerlIO::Via
-    Pod::Functions
-    Pod::Html
-    Pod::ParseLink
-    Pod::Text
-    POSIX
-    re
-    Safe
-    Scalar::Util
-    SDBM_File
-    Search::Dict
-    SelectSaver
-    SelfLoader
-    Shell
-    sigtrap
-    Socket
-    sort
-    Storable
-    strict
-    subs
-    Switch
-    Symbol
-    Sys::Hostname
-    Sys::Syslog
-    Term::Cap
-    Term::Complete
-    Term::ReadLine
-    Test
-    Test::Builder
-    Test::Harness
-    Test::More
-    Test::Simple
-    Text::Abbrev
-    Text::Balanced
-    Text::ParseWords
-    Text::Soundex
-    Text::Tabs
-    Text::Wrap
-    Thread
-    Thread::Queue
-    Thread::Semaphore
-    Thread::Signal
-    Thread::Specific
-    Tie::Array
-    Tie::StdArray
-    Tie::File
-    Tie::Handle
-    Tie::Hash
-    Tie::Memoize 
-    Tie::RefHash
-    Tie::Scalar
-    Tie::SubstrHash
-    Time::gmtime
-    Time::HiRes
-    Time::Local
-    Time::localtime
-    Time::tm
-    UNIVERSAL
-    User::grent
-    User::pwent
-    utf8
-    vars
-    vmsish
-    XS::Typemap
-));
 
 # when this script is main program
 if ($0 eq __FILE__) {
@@ -855,7 +619,7 @@ sub escape {
     elsif (m{\G \b ( if | unless | while | until | for | when ) \b }oxgc) { $slash = 'm//'; return $1;  }
 
 # functions of package Eeucjp
-    elsif (m{\G \b (CORE::(?:split|chop|index|rindex|lc|uc|chr|ord|reverse)) \b }oxgc) { $slash = 'm//'; return $1;    }
+    elsif (m{\G \b (CORE::(?:split|chop|index|rindex|lc|uc|chr|ord|reverse|open|binmode)) \b }oxgc) { $slash = 'm//'; return $1; }
     elsif (m{\G \b chop \b          (?! \s* => )              }oxgc) { $slash = 'm//'; return   'Eeucjp::chop';         }
     elsif (m{\G \b EUCJP::index \b   (?! \s* => )              }oxgc) { $slash = 'm//'; return   'EUCJP::index';         }
     elsif (m{\G \b index \b         (?! \s* => )              }oxgc) { $slash = 'm//'; return   'Eeucjp::index';        }
@@ -1506,7 +1270,6 @@ sub escape {
         }
     }
 
-
 # ''
     elsif (/\G (?<![\w\$\@\%\&\*]) (\') /oxgc) {
         my $q_string = '';
@@ -1875,7 +1638,7 @@ E_STRING_LOOP:
         }
 
 # functions of package Eeucjp
-        elsif ($string =~ m{\G \b (CORE::(?:split|chop|index|rindex|lc|uc|chr|ord|reverse)) \b }oxgc) { $e_string .= $1;     $slash = 'm//'; }
+        elsif ($string =~ m{\G \b (CORE::(?:split|chop|index|rindex|lc|uc|chr|ord|reverse|open|binmode)) \b }oxgc) { $e_string .= $1; $slash = 'm//'; }
         elsif ($string =~ m{\G \b chop \b                                    }oxgc) { $e_string .=   'Eeucjp::chop';          $slash = 'm//'; }
         elsif ($string =~ m{\G \b EUCJP::index \b                             }oxgc) { $e_string .=   'EUCJP::index';          $slash = 'm//'; }
         elsif ($string =~ m{\G \b index \b                                   }oxgc) { $e_string .=   'Eeucjp::index';         $slash = 'm//'; }
@@ -3659,14 +3422,6 @@ EUCJP - "Yet Another JPerl" Source code filter to escape EUC-JP
   use EUCJP qw(ord reverse); --- demand enhanced feature of ord and reverse
   use EUCJP version qw(ord reverse);
 
-  functions:
-    EUCJP::ord(...);
-    EUCJP::reverse(...);
-    EUCJP::length(...);
-    EUCJP::substr(...);
-    EUCJP::index(...);
-    EUCJP::rindex(...);
-
   # "no EUCJP;" not supported
 
   or
@@ -3675,6 +3430,14 @@ EUCJP - "Yet Another JPerl" Source code filter to escape EUC-JP
 
   EUC-JP_script.pl  --- script written in EUC-JP
   Escaped_script.pl.e --- escaped script
+
+  functions:
+    EUCJP::ord(...);
+    EUCJP::reverse(...);
+    EUCJP::length(...);
+    EUCJP::substr(...);
+    EUCJP::index(...);
+    EUCJP::rindex(...);
 
 =head1 ABSTRACT
 
@@ -3783,119 +3546,152 @@ I am glad that I could confirm my idea is not so wrong.
    perl512.bat      --- find and run perl5.12 without %PATH% settings
    perl64.bat       --- find and run perl64   without %PATH% settings
 
-=head1 CHARACTER CLASSES
+=head1 Upper Compatibility By Escaping
+
+This software adds the function by 'Escaping' it always, and nothing of the
+past is broken. Therefore, 'Possible job' never becomes 'Impossible job'.
+This approach is effective in the field where the retreat is never permitted.
+Modern Perl/perl can not always solve the problem.
+
+=head1 Escaping Your Script (You do)
+
+You need write 'use EUCJP;' in your script.
+
+  ---------------------------------
+  Before      After
+  ---------------------------------
+  use utf8;   use EUCJP;
+  ---------------------------------
+
+=head1 Escaping Multiple Octet Code (EUCJP software provides)
+
+Insert chr(0x5c) before  @  [  \  ]  ^  `  {  |  and  }  in multiple octet of
+
+=over 2
+
+=item * string in single quote ('', q{}, <<'END' and qw{})
+
+=item * string in double quote ("", qq{}, <<END, <<"END", ``, qx{} and <<`END`)
+
+=item * regexp in single quote (m'', s''', split(''), split(m'') and qr'')
+
+=item * regexp in double quote (//, m//, ??, s///, split(//), split(m//) and qr//)
+
+=item * character in tr/// (tr/// and y///)
+
+=back
+
+  ex. Japanese Katakana "SO" like [ `/ ] code is "\x83\x5C"
+ 
+                  see     hex dump
+  -----------------------------------------
+  source script   "`/"    [83 5c]
+  -----------------------------------------
+ 
+  Here, use EUCJP;
+                          hex dump
+  -----------------------------------------
+  escaped script  "`\/"   [83 [5c] 5c]
+  -----------------------------------------
+                    ^--- escape by EUCJP software
+ 
+  by the by       see     hex dump
+  -----------------------------------------
+  your eye's      "`/\"   [83 5c] [5c]
+  -----------------------------------------
+  perl eye's      "`\/"   [83] \[5c]
+  -----------------------------------------
+ 
+                          hex dump
+  -----------------------------------------
+  in the perl     "`/"    [83] [5c]
+  -----------------------------------------
+
+=head1 Escaping Character Classes (EUCJP software provides)
 
 The character classes are redefined as follows to backward compatibility.
 
   ---------------------------------------------------------------------------
-  escape        class
+  Before      After
   ---------------------------------------------------------------------------
-  \d            [0-9]
-  \s            [\x09\x0A\x0C\x0D\x20]
-  \w            [0-9A-Z_a-z]
-  \D            (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^0-9])
-  \S            (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x09\x0A\x0C\x0D\x20])
-  \W            (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^0-9A-Z_a-z])
-  \h            [\x09\x20]
-  \v            [\x0C\x0A\x0D]
-  \H            (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x09\x20])
-  \V            (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x0C\x0A\x0D])
-  ---------------------------------------------------------------------------
-
-Also \b and \B are redefined as follows to backward compatibility.
-
-  ---------------------------------------------------------------------------
-  escape        class
-  ---------------------------------------------------------------------------
-  \b            (?:(?:\A|(?<=\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF])|(?<=[^0-9A-Z_a-z]))(?=[0-9A-Z_a-z])|(?<=[0-9A-Z_a-z])(?=\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^0-9A-Z_a-z]|\z))
-  \B            (?:(?<=[0-9A-Z_a-z])(?=[0-9A-Z_a-z])|(?:(?<=\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF])|(?<=[^0-9A-Z_a-z]))(?=\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^0-9A-Z_a-z]))
+   .          (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x0A])
+              (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[\x00-\xFF]) (/s modifier)
+  \d          [0-9]
+  \s          [\x09\x0A\x0C\x0D\x20]
+  \w          [0-9A-Z_a-z]
+  \D          (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^0-9])
+  \S          (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x09\x0A\x0C\x0D\x20])
+  \W          (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^0-9A-Z_a-z])
+  \h          [\x09\x20]
+  \v          [\x0C\x0A\x0D]
+  \H          (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x09\x20])
+  \V          (?:\x8F[\xA1-\xFE][\xA1-\xFE]|[\x8E\xA1-\xFE][\x00-\xFF]|[^\x0C\x0A\x0D])
   ---------------------------------------------------------------------------
 
-=head1 JPerl COMPATIBLE FUNCTIONS
+=head1 Escaping Built-in Functions (EUCJP software provides)
 
-The following functions function as much as JPerl.
-A part of function in the script is written and changes by this software.
+Insert 'Eeucjp::' at head of function name. Eeucjp.pm provides your script Eeucjp::*
+functions.
 
-=over 2
+  ---------------------------------
+  Before      After
+  ---------------------------------
+  length      length
+  substr      substr
+  pos         pos
+  split       Eeucjp::split
+  tr///       Eeucjp::tr
+  tr///b      tr///
+  tr///B      tr///
+  y///        Eeucjp::tr
+  y///b       tr///
+  y///B       tr///
+  chop        Eeucjp::chop
+  index       Eeucjp::index
+  rindex      Eeucjp::rindex
+  chr         Eeucjp::chr
+  glob        Eeucjp::glob
+  ---------------------------------
 
-=item * handle multiple octet string in single quote
+  ------------------------------------------------------------------------------------------------------------------------
+  Before                   After
+  ------------------------------------------------------------------------------------------------------------------------
+  use Perl::Module;        BEGIN { require 'Perl/Module.pm'; Perl::Module->import() if Perl::Module->can('import'); }
+  use Perl::Module @list;  BEGIN { require 'Perl/Module.pm'; Perl::Module->import(@list) if Perl::Module->can('import'); }
+  use Perl::Module ();     BEGIN { require 'Perl/Module.pm'; }
+  no Perl::Module;         BEGIN { require 'Perl/Module.pm'; Perl::Module->unimport() if Perl::Module->can('unimport'); }
+  no Perl::Module @list;   BEGIN { require 'Perl/Module.pm'; Perl::Module->unimport(@list) if Perl::Module->can('unimport'); }
+  no Perl::Module ();      BEGIN { require 'Perl/Module.pm'; }
+  ------------------------------------------------------------------------------------------------------------------------
 
-=item * handle multiple octet string in double quote
+=head1 Escaping Function Name (You do)
 
-=item * handle multiple octet regexp in single quote
+You need write 'EUCJP::' at head of function name when you want character
+oriented function. See 'CHARACTER ORIENTED FUNCTIONS'.
 
-=item * handle multiple octet regexp in double quote
+  ---------------------------------
+  Before      After
+  ---------------------------------
+  ord         EUCJP::ord
+  reverse     EUCJP::reverse
+  length      EUCJP::length
+  substr      EUCJP::substr
+  index       EUCJP::index
+  rindex      EUCJP::rindex
+  ---------------------------------
 
-=item * chop --> Eeucjp::chop
+=head1 Escaping Built-in Standard Module (EUCJP software provides)
 
-=item * split --> Eeucjp::split
+Eeucjp.pm does "BEGIN { unshift @INC, '/Perl/site/lib/EUCJP' }" at head.
+Store the standard module modified for EUCJP software in this directory to
+override built-in standard modules.
 
-=item * length
+=head1 Escaping Standard Module Content (You do)
 
-=item * substr
+You need copy built-in standard module to /Perl/site/lib/EUCJP and change
+'use utf8;' to 'use EUCJP;' in its. You need help yourself for now.
 
-=item * index --> Eeucjp::index
-
-=item * rindex --> Eeucjp::rindex
-
-=item * pos
-
-=item * ord (when no import)
-
-=item * reverse (when no import)
-
-=item * tr/// or y/// --> Eeucjp::tr
-
-/b and /B modifier can also be used.
-
-=item * require --> require
-
-=item * use Perl::Module @list; --> BEGIN { require 'Perl/Module.pm'; Perl::Module->import(@list) if Perl::Module->can('import'); }
-
-=item * use Perl::Module (); --> BEGIN { require 'Perl/Module.pm'; }
-
-=back
-
-=head1 JPerl UPPER COMPATIBLE FUNCTIONS
-
-The following functions are enhanced more than JPerl.
-
-=over 2
-
-=item * chr --> Eeucjp::chr or Eeucjp::chr_
-
-multiple octet code can also be handled.
-
-=item * glob --> Eeucjp::glob or Eeucjp::glob_
-
-  @glob = Eeucjp::glob($string);
-  @glob = Eeucjp::glob_;
-
-Eeucjp::glob provides a portable enhanced DOS-like globbing for the EUCJP software.
-Eeucjp::glob lets you use wildcards in directory paths, is case-insensitive, and
-accepts both backslashes and forward slashes (although you may have to double the
-backslashes).
-
-From a Perl script:
-
-use EUCJP;
-@perlfiles = glob  "..\pe?l/*.p?";
-print <..\pe?l/*.p?>;
-
-a tilde ("~") expands to the current user's home directory.
-support chr(0x5C) ended path on MSWin32.
-
-=item * ord --> EUCJP::ord or EUCJP::ord_
-
-multiple octet code can also be handled when "use EUCJP qw(ord);".
-It means not compatible with JPerl.
-
-=item * reverse --> EUCJP::reverse
-
-multiple octet code can also be handled in scalar context when "use EUCJP qw(reverse);".
-It means not compatible with JPerl.
-
-=back
+Back to and see 'Escaping Your Script'. Enjoy hacking!!
 
 =head1 CHARACTER ORIENTED FUNCTIONS
 
@@ -4050,7 +3846,9 @@ Function "format" can't handle multiple octet code same as original Perl.
 The latest value of variable $re is used as a regular expression. This will not
 actually become a problem. Because when you use /o, you are sure not to change $re.
 
-=back
+=item * EUCJP::substr as lvalue
+
+EUCJP::substr differs from CORE::substr, and cannot be used as a lvalue.
 
 =item * Special variables $` and $& doesn't function
 
@@ -4085,13 +3883,13 @@ actually become a problem. Because when you use /o, you are sure not to change $
 
   $1 does function instead of $&.
 
+=back
+
 =head1 AUTHOR
 
 INABA Hitoshi E<lt>ina@cpan.orgE<gt>
 
 This project was originated by INABA Hitoshi.
-For any questions, use E<lt>ina@cpan.orgE<gt> so we can share
-this file.
 
 =head1 LICENSE AND COPYRIGHT
 
@@ -4202,22 +4000,23 @@ Perl should remain one language, rather than forking into a
 byte-oriented Perl and a character-oriented Perl.
 
 JPerl forked the perl interpreter so as not to fork the Perl language.
-But the Perl core team might not hope for the perl interpreter's
-divergence.
+But the Perl core team might not hope for the perl interpreter's fork.
+As a result, the Perl language forked, and the community was reduced
+through necessity.
 
-A character-oriented Perl is not necessary to make it specially,
-because a byte-oriented Perl can already treat the binary data.
+A character-oriented perl is not necessary to make it specially,
+because a byte-oriented perl can already treat the binary data.
 This software is only an application program of Perl, a filter program.
 If perl can be executed, this software will be able to be executed.
 
-And when you solve the problem by the perl script, the perl community
-will support you.
+And you will get support from the Perl community, when you solve the
+problem by the Perl script.
 
 =item Goal #5:
 
 JPerl users will be able to maintain JPerl by Perl.
 
---- maybe, and sure.
+May the JPerl be with you, always.
 
 =back
 
@@ -4370,6 +4169,7 @@ I am thankful to all persons.
 
  SADAHIRO Tomoyuki, The right way of using Shift_JIS
  http://homepage1.nifty.com/nomenclator/perl/shiftjis.htm
+ http://search.cpan.org/dist/EUC-JP-Regexp/
 
  Yukihiro "Matz" Matsumoto, YAPC::Asia2006 Ruby on Perl(s)
  http://www.rubyist.net/~matz/slides/yapc2006/
@@ -4395,6 +4195,11 @@ I am thankful to all persons.
  WATANABE Hirofumi, Jperl
  http://search.cpan.org/~watanabe/
  ftp://ftp.oreilly.co.jp/pcjp98/watanabe/jperlconf.ppt
+
+ Kenichi Ishigaki, Pod-PerldocJp, Welcome to modern Perl world
+ http://search.cpan.org/dist/Pod-PerldocJp/
+ http://gihyo.jp/dev/serial/01/modern-perl/0031
+ http://gihyo.jp/dev/serial/01/modern-perl/0032
 
  Dan Kogai, Encode module
  http://search.cpan.org/dist/Encode/
