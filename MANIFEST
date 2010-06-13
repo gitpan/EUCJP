@@ -1,5 +1,5 @@
-EUCJP.pm
-Eeucjp.pm
+lib/EUCJP.pm
+lib/Eeucjp.pm
 perl58.bat
 perl510.bat
 perl512.bat
