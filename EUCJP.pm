@@ -19,7 +19,7 @@ use Eeucjp;
 
 BEGIN { eval q{ use vars qw($VERSION $_warning) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.59 $ =~ m/(\d+)/oxmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.60 $ =~ m/(\d+)/oxmsg;
 
 # poor Symbol.pm - substitute of real Symbol.pm
 BEGIN {
@@ -2172,6 +2172,19 @@ sub e_qq {
         if (0) {
         }
 
+        elsif ($char[$i] eq '\Q') {
+            while (1) {
+                if (++$i > $#char) {
+                    last;
+                }
+                if ($char[$i] eq '\E') {
+                    last;
+                }
+            }
+        }
+        elsif ($char[$i] eq '\E') {
+        }
+
         # $0 --> $0
         elsif ($char[$i] =~ m/\A \$ 0 \z/oxms) {
         }
@@ -2287,6 +2300,19 @@ sub e_heredoc {
 
     for (my $i=0; $i <= $#char; $i++) {
         if (0) {
+        }
+
+        elsif ($char[$i] eq '\Q') {
+            while (1) {
+                if (++$i > $#char) {
+                    last;
+                }
+                if ($char[$i] eq '\E') {
+                    last;
+                }
+            }
+        }
+        elsif ($char[$i] eq '\E') {
         }
 
         # $0 --> $0
@@ -2474,6 +2500,19 @@ sub e_qr {
 
         # /i modifier
         elsif ($char[$i] =~ m/\A [A-Za-z] \z/oxms) {
+        }
+
+        elsif ($char[$i] eq '\Q') {
+            while (1) {
+                if (++$i > $#char) {
+                    last;
+                }
+                if ($char[$i] eq '\E') {
+                    last;
+                }
+            }
+        }
+        elsif ($char[$i] eq '\E') {
         }
 
         # $0 --> $0
@@ -2770,6 +2809,19 @@ sub e_s1 {
 
         # /i modifier
         elsif ($char[$i] =~ m/\A [A-Za-z] \z/oxms) {
+        }
+
+        elsif ($char[$i] eq '\Q') {
+            while (1) {
+                if (++$i > $#char) {
+                    last;
+                }
+                if ($char[$i] eq '\E') {
+                    last;
+                }
+            }
+        }
+        elsif ($char[$i] eq '\E') {
         }
 
         # \0 --> \0
@@ -3074,9 +3126,11 @@ sub e_sub {
     my $sub;
     if ($modifier =~ m/g/oxms) {
 
+        my $prematch = q{1};
+
         $sub = sprintf(
-            #      1  2       3  4              5 6 7   8  9         10  1112  13      14           15          16      17     18          19       20    21      22
-            q<eval{%s %s_n=0; %s %s_a=''; while(%s%s%s){%s %s_r=eval %s; %s%s="%s_a${1}%s_r$'"; pos(%s)=length "%s_a${1}%s_r"; %s_a=substr(%s,0,pos(%s)); %s_n++} %s_n}>,
+            #      1  2       3  4              5 6 7   8  9         10  1112  13    14 15           16          17    18 19     20          21       22    23      24
+            q<eval{%s %s_n=0; %s %s_a=''; while(%s%s%s){%s %s_r=eval %s; %s%s="%s_a${%s}%s_r$'"; pos(%s)=length "%s_a${%s}%s_r"; %s_a=substr(%s,0,pos(%s)); %s_n++} %s_n}>,
 
             $local,                                                                       #  1
                 $variable_basename,                                                       #  2
@@ -3093,35 +3147,42 @@ sub e_sub {
             sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, # 11
             $variable,                                                                    # 12
                 $variable_basename,                                                       # 13
-                $variable_basename,                                                       # 14
-            $variable,                                                                    # 15
-                $variable_basename,                                                       # 16
+            $prematch,                                                                    # 14
+                $variable_basename,                                                       # 15
+            $variable,                                                                    # 16
                 $variable_basename,                                                       # 17
-                $variable_basename,                                                       # 18
-            $variable,                                                                    # 19
-            $variable,                                                                    # 20
-                $variable_basename,                                                       # 21
-                $variable_basename,                                                       # 22
+            $prematch,                                                                    # 18
+                $variable_basename,                                                       # 19
+                $variable_basename,                                                       # 20
+            $variable,                                                                    # 21
+            $variable,                                                                    # 22
+                $variable_basename,                                                       # 23
+                $variable_basename,                                                       # 24
         );
     }
 
     # s///
     else {
-        $sub = sprintf(
-            #  1 2 3          4  5         6   7 8       9
-            q<(%s%s%s) ? eval{%s %s_r=eval %s; %s%s="${1}%s_r$'"; 1 } : ''>,
 
-            $variable,                                                                    # 1
-            $bind_operator,                                                               # 2
-            ($delimiter1 eq "'") ?                                                        # 3
-            e_s1_q('m', $delimiter1, $end_delimiter1, $pattern, $modifier) :              # :
-            e_s1  ('m', $delimiter1, $end_delimiter1, $pattern, $modifier),               # :
-            $local,                                                                       # 4
-                $variable_basename,                                                       # 5
-            $e_replacement,                                                               # 6
-            sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, # 7
-            $variable,                                                                    # 8
-                $variable_basename,                                                       # 9
+        my $prematch = q{`};
+        $prematch = q{1};
+
+        $sub = sprintf(
+            #  1 2 3          4  5         6   7 8     9  10
+            q<(%s%s%s) ? eval{%s %s_r=eval %s; %s%s="${%s}%s_r$'"; 1 } : ''>,
+
+            $variable,                                                                    #  1
+            $bind_operator,                                                               #  2
+            ($delimiter1 eq "'") ?                                                        #  3
+            e_s1_q('m', $delimiter1, $end_delimiter1, $pattern, $modifier) :              #  :
+            e_s1  ('m', $delimiter1, $end_delimiter1, $pattern, $modifier),               #  :
+            $local,                                                                       #  4
+                $variable_basename,                                                       #  5
+            $e_replacement,                                                               #  6
+            sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, #  7
+            $variable,                                                                    #  8
+            $prematch,                                                                    #  9
+                $variable_basename,                                                       # 10
         );
     }
 
@@ -3247,6 +3308,19 @@ sub e_split {
 
         # /i modifier
         elsif ($char[$i] =~ m/\A ([A-Za-z]) \z/oxms) {
+        }
+
+        elsif ($char[$i] eq '\Q') {
+            while (1) {
+                if (++$i > $#char) {
+                    last;
+                }
+                if ($char[$i] eq '\E') {
+                    last;
+                }
+            }
+        }
+        elsif ($char[$i] eq '\E') {
         }
 
         # $0 --> $0
@@ -3581,19 +3655,19 @@ Insert chr(0x5c) before  @  [  \  ]  ^  `  {  |  and  }  in multiple octet of
 
 =back
 
-  ex. Japanese Katakana "SO" like [ `/ ] code is "\x83\x5C"
+  ex. Japanese Katakana "SO" like [ `/ ] code is "\x83\x5C" in SJIS
  
                   see     hex dump
   -----------------------------------------
   source script   "`/"    [83 5c]
   -----------------------------------------
  
-  Here, use EUCJP;
+  Here, use SJIS;
                           hex dump
   -----------------------------------------
   escaped script  "`\/"   [83 [5c] 5c]
   -----------------------------------------
-                    ^--- escape by EUCJP software
+                    ^--- escape by SJIS software
  
   by the by       see     hex dump
   -----------------------------------------
@@ -4139,6 +4213,7 @@ programming environment like at that time.
  http://ascii.asciimw.jp/books/magazines/unix.shtml
 
  Yet Another JPerl family
+ http://search.cpan.org/dist/Big5HKSCS/
  http://search.cpan.org/dist/Big5Plus/
  http://search.cpan.org/dist/EUCJP/
  http://search.cpan.org/dist/GB18030/
@@ -4206,6 +4281,7 @@ I am thankful to all persons.
  http://search.cpan.org/dist/Pod-PerldocJp/
  http://gihyo.jp/dev/serial/01/modern-perl/0031
  http://gihyo.jp/dev/serial/01/modern-perl/0032
+ http://gihyo.jp/dev/serial/01/modern-perl/0033
 
  Dan Kogai, Encode module
  http://search.cpan.org/dist/Encode/
