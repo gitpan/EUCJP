@@ -14,10 +14,10 @@ else {
 }
 
 if ('アABC DEF GHI' =~ /\BABC/) {
-    print "ok - 2 $^X $__FILE__ ('アABC DEF GHI' =~ /\\BABC/)\n";
+    print "not ok - 2 $^X $__FILE__ ('アABC DEF GHI' =~ /\\BABC/)\n";
 }
 else {
-    print "not ok - 2 $^X $__FILE__ ('アABC DEF GHI' =~ /\\BABC/)\n";
+    print "ok - 2 $^X $__FILE__ ('アABC DEF GHI' =~ /\\BABC/)\n";
 }
 
 if ('アABC DEF GHI' =~ /\BDEF/) {

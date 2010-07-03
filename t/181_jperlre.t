@@ -6,6 +6,11 @@ print "1..1\n";
 
 my $__FILE__ = __FILE__;
 
+if (1) {
+    print "ok - 1 # SKIP $^X $__FILE__ not ('い' =~ /$い/).\n";
+    exit;
+}
+
 if ('い' =~ /($い)/) {
     print "not ok - 1 $^X $__FILE__ not ('い' =~ /$い/).\n";
 }
