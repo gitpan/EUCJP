@@ -1,6 +1,6 @@
 NAME
 
-       EUCJP - "Yet Another JPerl" Source code filter for EUC-JP script
+       EUCJP - Source code filter for EUC-JP script
 
 SYNOPSIS
 
@@ -18,7 +18,7 @@ SYNOPSIS
 
 DESCRIPTION
 
-      This software is "Yet Another JPerl" written by Perl.
+      This software is "JPerl on the Modern Perl" written by Perl.
       We can write the script in EUC-JP again.
 
       This software treats EUC-JP directly. Therefore, there is not UTF8 flag.
