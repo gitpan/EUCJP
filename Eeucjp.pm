@@ -10,20 +10,67 @@ package Eeucjp;
 ######################################################################
 
 use 5.00503;
-BEGIN {
-    my $PERL5LIB = __FILE__;
-    $PERL5LIB =~ s{[^/]*$}{EUCJP};
-    unshift @INC, $PERL5LIB;
-}
 
 # 12.3. Delaying use Until Runtime
 # in Chapter 12. Packages, Libraries, and Modules
 # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
 # (and so on)
 
-BEGIN { eval q{ use vars qw($VERSION $_warning) } }
+BEGIN { eval q{ use vars qw($VERSION) } }
+$VERSION = sprintf '%d.%02d', q$Revision: 0.66 $ =~ m/(\d+)/xmsg;
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.64 $ =~ m/(\d+)/xmsg;
+# use strict qw(subs vars);
+BEGIN {
+    eval { require strict; 'strict'->import(qw(subs vars)); };
+}
+
+BEGIN {
+    my $PERL5LIB = __FILE__;
+    $PERL5LIB =~ s{[^/]*$}{EUCJP};
+    unshift @INC, $PERL5LIB;
+}
+
+BEGIN {
+
+    # instead of utf8.pm
+    eval q{
+        no warnings qw(redefine);
+        *utf8::upgrade   = sub { length $_[0] };
+        *utf8::downgrade = sub { 1 };
+        *utf8::encode    = sub {   };
+        *utf8::decode    = sub { 1 };
+        *utf8::is_utf8   = sub {   };
+        *utf8::valid     = sub { 1 };
+    };
+    if ($@) {
+        *utf8::upgrade   = sub { length $_[0] };
+        *utf8::downgrade = sub { 1 };
+        *utf8::encode    = sub {   };
+        *utf8::decode    = sub { 1 };
+        *utf8::is_utf8   = sub {   };
+        *utf8::valid     = sub { 1 };
+    }
+
+    # 7.6. Writing a Subroutine That Takes Filehandles as Built-ins Do
+    # in Chapter 7. File Access
+    # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
+
+    sub Eeucjp::binmode(*;$);
+    sub Eeucjp::open(*;$@);
+
+    if ($] < 5.006) {
+
+        # 12.13. Overriding a Built-in Function in All Packages
+        # in Chapter 12. Packages, Libraries, and Modules
+        # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
+
+        # avoid warning: Name "CORE::GLOBAL::binmode" used only once: possible typo at ...
+        *CORE::GLOBAL::binmode =
+        *CORE::GLOBAL::binmode = \&Eeucjp::binmode;
+        *CORE::GLOBAL::open    =
+        *CORE::GLOBAL::open    = \&Eeucjp::open;
+    }
+}
 
 # poor Symbol.pm - substitute of real Symbol.pm
 BEGIN {
@@ -62,26 +109,28 @@ BEGIN {
     }
 }
 
-BEGIN {
-    eval { require strict;   'strict'  ->import; };
-#   eval { require warnings; 'warnings'->import; };
-}
-
 # P.714 29.2.39. flock
 # in Chapter 29: Functions
 # of ISBN 0-596-00027-8 Programming Perl Third Edition.
 
-sub LOCK_SH() {1}
-sub LOCK_EX() {2}
-sub LOCK_UN() {8}
-sub LOCK_NB() {4}
+unless (eval q{ use Fcntl qw(:flock); 1 }) {
+    eval q{
+        sub LOCK_SH {1}
+        sub LOCK_EX {2}
+        sub LOCK_UN {8}
+        sub LOCK_NB {4}
+    };
+}
 
 # instead of Carp.pm
-sub carp (@);
-sub croak (@);
-sub cluck (@);
-sub confess (@);
+sub carp(@);
+sub croak(@);
+sub cluck(@);
+sub confess(@);
 
+my $__FILE__ = __FILE__;
+
+BEGIN { eval q{ use vars qw($_warning) } }
 $_warning = $^W; # push warning, warning on
 local $^W = 1;
 
@@ -103,6 +152,12 @@ my %range_tr = ();
 my $is_shiftjis_family = 0;
 my $is_eucjp_family    = 0;
 
+#
+# alias of encoding name
+#
+
+BEGIN { eval q{ use vars qw($encoding_alias) } }
+
 if (0) {
 }
 
@@ -112,6 +167,7 @@ elsif (__PACKAGE__ eq 'Elatin1') {
         1 => [ [0x00..0xFF],
              ],
     );
+    $encoding_alias = qr/ \b (?: ISO[-_ ]?8859-15? | IEC[- ]?8859-15? | Latin-?1 | Windows-?1252 | ECMA-?94 | ISO_8859-1:1987 | iso-ir-?100 | csISOLatin1 | l1 | IBM819 | CP819 ) \b /oxmsi;
 }
 
 # EUC-JP
@@ -126,6 +182,7 @@ elsif (__PACKAGE__ eq 'Eeucjp') {
              ],
     );
     $is_eucjp_family = 1;
+    $encoding_alias = qr/ \b (?: euc.*jp | jp.*euc | ujis ) \b /oxmsi;
 }
 
 # UTF-2
@@ -145,6 +202,7 @@ elsif (__PACKAGE__ eq 'Eutf2') {
                [0xF4..0xF4],[0x80..0x8F],[0x80..0xBF],[0x80..0xBF],
              ],
     );
+    $encoding_alias = qr/ \b (?: UTF-8 | utf-8-strict | UTF-?2 ) \b /oxmsi;
 }
 
 # Old UTF-8
@@ -159,6 +217,7 @@ elsif (__PACKAGE__ eq 'Eoldutf8') {
         4 => [ [0xF0..0xF4],[0x80..0xBF],[0x80..0xBF],[0x80..0xBF],
              ],
     );
+    $encoding_alias = qr/ \b (?: utf8 | CESU-?8 | Modified[ ]?UTF-?8 | Old[ ]?UTF-?8 ) \b /oxmsi;
 }
 
 else {
@@ -1488,6 +1547,192 @@ sub _parse_path {
 }
 
 #
+# instead of binmode (for perl5.005 only)
+#
+sub Eeucjp::binmode(*;$) {
+    if (@_ == 1) {
+        if (ref $_[0]) {
+            my $filehandle = qualify_to_ref $_[0];
+            return CORE::binmode $filehandle;
+        }
+        else {
+            return CORE::binmode *{(caller(1))[0] . "::$_[0]"};
+        }
+    }
+    elsif (@_ == 2) {
+        my(undef,$layer) = @_;
+        $layer =~ s/ :? encoding\($encoding_alias\) //oxms;
+        if ($layer =~ m/\A :raw \z/oxms) {
+            if ($_[0] =~ m/\A (?: STDIN | STDOUT | STDERR ) \z/oxms) {
+                return CORE::binmode $_[0];
+            }
+            elsif (ref $_[0]) {
+                my $filehandle = qualify_to_ref $_[0];
+                return CORE::binmode $filehandle;
+            }
+            else {
+                return CORE::binmode *{(caller(1))[0] . "::$_[0]"};
+            }
+        }
+        elsif ($layer =~ m/\A :crlf \z/oxms) {
+            return;
+        }
+        else {
+            return;
+        }
+    }
+    else {
+        croak "$0: usage: binmode(FILEHANDLE [,LAYER])";
+    }
+}
+
+#
+# instead of open (for perl5.005 only)
+#
+sub Eeucjp::open(*;$@) {
+
+    if (@_ == 0) {
+        croak "$0: usage: open(FILEHANDLE [,MODE [,LIST]])";
+    }
+    elsif (@_ == 1) {
+        my $filehandle = gensym;
+        my $expr = ${(caller(1))[0] . "::$_[0]"};
+        my $ref = \${(caller(1))[0] . "::$_[0]"};
+        *{(caller(1))[0] . "::$_[0]"} = $filehandle;
+        *{(caller(1))[0] . "::$_[0]"} = $ref;
+        return CORE::open $filehandle, $expr;
+    }
+
+    my $filehandle = gensym;
+    {
+        local $^W = 0;
+        if (not defined $_[0]) {
+            $_[0] = $filehandle;
+        }
+        else {
+            *{(caller(1))[0] . "::$_[0]"} = $filehandle;
+        }
+    }
+
+    if (@_ == 2) {
+        return CORE::open $filehandle, $_[1];
+    }
+    elsif (@_ == 3) {
+        my(undef,$mode,$expr) = @_;
+
+        $mode =~ s/ :? encoding\($encoding_alias\) //oxms;
+        $mode =~ s/ :crlf //oxms;
+        my $binmode = $mode =~ s/ :raw //oxms;
+
+        if (eval q{ use Fcntl qw(O_RDONLY O_WRONLY O_RDWR O_CREAT O_TRUNC O_APPEND); 1 }) {
+
+            # 7.1. Opening a File
+            # in Chapter 7. File Access
+            # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
+
+            my %o_flags = (
+                ''    => &O_RDONLY,
+                '<'   => &O_RDONLY,
+                '>'   => &O_WRONLY | &O_TRUNC  | &O_CREAT,
+                '>>'  => &O_WRONLY | &O_APPEND | &O_CREAT,
+                '+<'  => &O_RDWR,
+                '+>'  => &O_RDWR   | &O_TRUNC  | &O_CREAT,
+                '+>>' => &O_RDWR   | &O_APPEND | &O_CREAT,
+            );
+            if ($o_flags{$mode}) {
+                my $sysopen = CORE::sysopen $filehandle, $expr, $o_flags{$mode};
+                if ($sysopen and $binmode) {
+                    CORE::binmode $filehandle;
+                }
+                return $sysopen;
+            }
+        }
+
+        # P.747 29.2.104. open
+        # in Chapter 29: Functions
+        # of ISBN 0-596-00027-8 Programming Perl Third Edition.
+        # (and so on)
+
+        if ($mode eq '|-') {
+            my $open = CORE::open $filehandle, qq{| $expr};
+            if ($open and $binmode) {
+                CORE::binmode $filehandle;
+            }
+            return $open;
+        }
+        elsif ($mode eq '-|') {
+            my $open = CORE::open $filehandle, qq{$expr |};
+            if ($open and $binmode) {
+                CORE::binmode $filehandle;
+            }
+            return $open;
+        }
+        elsif ($mode =~ m/\A (?: \+? (?: < | > | >> ) )? \z/oxms) {
+
+            # 7.2. Opening Files with Unusual Filenames
+            # in Chapter 7. File Access
+            # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
+
+            $expr =~ s#\A([ ])#./$1#oxms;
+            my $open = CORE::open $filehandle, qq{$mode $expr\0};
+            if ($open and $binmode) {
+                CORE::binmode $filehandle;
+            }
+            return $open;
+        }
+        else {
+            croak "$0: open: Unknown open() mode '$mode'";
+        }
+    }
+    else {
+        my(undef,$mode,@list) = @_;
+
+        $mode =~ s/ :? encoding\($encoding_alias\) //oxms;
+        $mode =~ s/ :crlf //oxms;
+        my $binmode = $mode =~ s/ :raw //oxms;
+
+        my $expr = '';
+
+        # DOS-like system
+        if ($^O =~ /\A (?: MSWin32 | NetWare | symbian | dos ) \z/oxms) {
+            $expr = join ' ', map {m/ (?:$your_char)*? [ ] /oxms ? qq{"$_"} : $_} @list;
+        }
+
+        # UNIX like system
+        else {
+            $expr = join ' ', map { escapeshellcmd($_) }                   @list;
+        }
+
+        if ($mode eq '|-') {
+            my $open = CORE::open $filehandle, qq{| $expr};
+            if ($open and $binmode) {
+                CORE::binmode $filehandle;
+            }
+            return $open;
+        }
+        elsif ($mode eq '-|') {
+            my $open = CORE::open $filehandle, qq{$expr |};
+            if ($open and $binmode) {
+                CORE::binmode $filehandle;
+            }
+            return $open;
+        }
+        else {
+            croak "$0: open: Unknown open() mode '$mode'";
+        }
+    }
+}
+
+#
+# escape shell command line
+#
+sub escapeshellcmd {
+    my($word) = @_;
+    $word =~ s/([\t\n\r\x20!"#\$%&'()*+;<=>?\[\\\]^`{|}~\x7F\xFF])/\\$1/g;
+    return $word;
+}
+
+#
 # EUC-JP character to order (with parameter)
 #
 sub EUCJP::ord(;$) {
@@ -1635,7 +1880,7 @@ sub EUCJP::rindex($$;$) {
 #
 # instead of Carp::carp
 #
-sub carp (@) {
+sub carp(@) {
     my($package,$filename,$line) = caller(1);
     print STDERR "@_ at $filename line $line.\n";
 }
@@ -1643,7 +1888,7 @@ sub carp (@) {
 #
 # instead of Carp::croak
 #
-sub croak (@) {
+sub croak(@) {
     my($package,$filename,$line) = caller(1);
     print STDERR "@_ at $filename line $line.\n";
     die "\n";
@@ -1652,7 +1897,7 @@ sub croak (@) {
 #
 # instead of Carp::cluck
 #
-sub cluck (@) {
+sub cluck(@) {
     my $i = 0;
     my @cluck = ();
     while (my($package,$filename,$line,$subroutine) = caller($i)) {
@@ -1667,7 +1912,7 @@ sub cluck (@) {
 #
 # instead of Carp::confess
 #
-sub confess (@) {
+sub confess(@) {
     my $i = 0;
     my @confess = ();
     while (my($package,$filename,$line,$subroutine) = caller($i)) {

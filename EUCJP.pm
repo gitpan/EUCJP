@@ -19,7 +19,7 @@ use Eeucjp;
 
 BEGIN { eval q{ use vars qw($VERSION $_warning) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.64 $ =~ m/(\d+)/oxmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.66 $ =~ m/(\d+)/oxmsg;
 
 # poor Symbol.pm - substitute of real Symbol.pm
 BEGIN {
@@ -42,10 +42,14 @@ BEGIN {
 # in Chapter 29: Functions
 # of ISBN 0-596-00027-8 Programming Perl Third Edition.
 
-sub LOCK_SH() {1}
-sub LOCK_EX() {2}
-sub LOCK_UN() {8}
-sub LOCK_NB() {4}
+unless (eval q{ use Fcntl qw(:flock); 1 }) {
+    eval q{
+        sub LOCK_SH {1}
+        sub LOCK_EX {2}
+        sub LOCK_UN {8}
+        sub LOCK_NB {4}
+    };
+}
 
 $_warning = $^W; # push warning, warning on
 local $^W = 1;
@@ -186,6 +190,7 @@ my $function_reverse;     # reverse to reverse or EUCJP::reverse
 
 my $ignore_modules = join('|', qw(
     utf8
+    bytes
     I18N::Japanese
     I18N::Collate
     I18N::JExt
@@ -226,19 +231,29 @@ and rewrite "use $package;" to "use $__PACKAGE__::$package;" of script "$0".
 END
 }
 
-# delete escaped script always while debug
-if (exists $ENV{'SJIS_DEBUG'}) {
-#   print STDERR "$__FILE__: delete $filename.e (\$ENV{'SJIS_DEBUG'}=$ENV{'SJIS_DEBUG'})\n";
-
-    unlink "$filename.e";
+if (-e("$filename.e")) {
+    if (exists $ENV{'SJIS_DEBUG'}) {
+        unlink "$filename.e";
+    }
+    else {
+        my $e_mtime   = (stat("$filename.e"))[9];
+        my $mtime     = (stat($filename))[9];
+        my $__mtime__ = (stat($__FILE__))[9];
+        if (($e_mtime < $mtime) or ($mtime < $__mtime__)) {
+            unlink "$filename.e";
+        }
+    }
 }
 
-my $e_mtime   = (stat("$filename.e"))[9];
-my $mtime     = (stat($filename))[9];
-my $__mtime__ = (stat($__FILE__))[9];
-if ((not -e("$filename.e")) or ($e_mtime < $mtime) or ($mtime < $__mtime__)) {
+if (not -e("$filename.e")) {
     my $fh = gensym();
-    open($fh, ">$filename.e") or die "$__FILE__: Can't write open file: $filename.e";
+
+    if (eval q{ use Fcntl qw(O_WRONLY O_CREAT); 1 } and CORE::sysopen($fh,"$filename.e",&O_WRONLY|&O_CREAT)) {
+    }
+    else {
+        CORE::open($fh, ">$filename.e") or die "$__FILE__: Can't write open file: $filename.e";
+    }
+
     if (exists $ENV{'SJIS_NONBLOCK'}) {
 
         # 7.18. Locking a File
@@ -257,6 +272,9 @@ if ((not -e("$filename.e")) or ($e_mtime < $mtime) or ($mtime < $__mtime__)) {
         eval q{ flock($fh, LOCK_EX) };
     }
 
+    truncate($fh, 0) or die "$__FILE__: Can't truncate file: $filename.e";
+    seek($fh, 0, 0)  or die "$__FILE__: Can't seek file: $filename.e";
+
     my $e_script = EUCJP::escape_script($filename);
     print {$fh} $e_script;
 
@@ -273,7 +291,7 @@ if ((not -e("$filename.e")) or ($e_mtime < $mtime) or ($mtime < $__mtime__)) {
 local @ENV{qw(IFS CDPATH ENV BASH_ENV)};
 
 my $fh = gensym();
-open($fh, "$filename.e") or die "$__FILE__: Can't read open file: $filename.e";
+CORE::open($fh, "$filename.e") or die "$__FILE__: Can't read open file: $filename.e";
 if (exists $ENV{'SJIS_NONBLOCK'}) {
     eval q{
         unless (flock($fh, LOCK_SH | LOCK_NB)) {
@@ -310,7 +328,7 @@ sub EUCJP::escape_script {
 
     # read EUC-JP script
     my $fh = gensym();
-    open($fh, $script) or die "$__FILE__: Can't open file: $script";
+    CORE::open($fh, $script) or die "$__FILE__: Can't open file: $script";
     local $/ = undef; # slurp mode
     $_ = <$fh>;
     close($fh) or die "$__FILE__: Can't close file: $script";
@@ -620,18 +638,53 @@ sub escape {
 
 # functions of package Eeucjp
     elsif (m{\G \b (CORE::(?:split|chop|index|rindex|lc|uc|chr|ord|reverse|open|binmode)) \b }oxgc) { $slash = 'm//'; return $1; }
-    elsif (m{\G \b chop \b          (?! \s* => )              }oxgc) { $slash = 'm//'; return   'Eeucjp::chop';         }
-    elsif (m{\G \b EUCJP::index \b   (?! \s* => )              }oxgc) { $slash = 'm//'; return   'EUCJP::index';         }
-    elsif (m{\G \b index \b         (?! \s* => )              }oxgc) { $slash = 'm//'; return   'Eeucjp::index';        }
-    elsif (m{\G \b EUCJP::rindex \b  (?! \s* => )              }oxgc) { $slash = 'm//'; return   'EUCJP::rindex';        }
-    elsif (m{\G \b rindex \b        (?! \s* => )              }oxgc) { $slash = 'm//'; return   'Eeucjp::rindex';       }
-    elsif (m{\G \b chr   (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'm//'; return   'Eeucjp::chr';                }
-    elsif (m{\G \b ord   (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'div'; return   $function_ord;               }
-    elsif (m{\G \b glob  (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'm//'; return   'Eeucjp::glob';               }
-    elsif (m{\G \b chr \b     (?! \s* => )                    }oxgc) { $slash = 'm//'; return   'Eeucjp::chr_';               }
-    elsif (m{\G \b ord \b     (?! \s* => )                    }oxgc) { $slash = 'div'; return   $function_ord_;              }
-    elsif (m{\G \b glob \b    (?! \s* => )                    }oxgc) { $slash = 'm//'; return   'Eeucjp::glob_';              }
-    elsif (m{\G \b reverse \b (?! \s* => )                    }oxgc) { $slash = 'm//'; return   $function_reverse;           }
+    elsif (m{\G \b bytes::substr \b (?! \s* => )                }oxgc) { $slash = 'm//'; return 'substr';              }
+    elsif (m{\G \b chop \b          (?! \s* => )                }oxgc) { $slash = 'm//'; return 'Eeucjp::chop';         }
+    elsif (m{\G \b bytes::index \b  (?! \s* => )                }oxgc) { $slash = 'm//'; return 'index';               }
+    elsif (m{\G \b EUCJP::index \b   (?! \s* => )                }oxgc) { $slash = 'm//'; return 'EUCJP::index';         }
+    elsif (m{\G \b index \b         (?! \s* => )                }oxgc) { $slash = 'm//'; return 'Eeucjp::index';        }
+    elsif (m{\G \b bytes::rindex \b (?! \s* => )                }oxgc) { $slash = 'm//'; return 'rindex';              }
+    elsif (m{\G \b EUCJP::rindex \b  (?! \s* => )                }oxgc) { $slash = 'm//'; return 'EUCJP::rindex';        }
+    elsif (m{\G \b rindex \b        (?! \s* => )                }oxgc) { $slash = 'm//'; return 'Eeucjp::rindex';       }
+
+    # "-s '' ..." means file test "-s 'filename' ..." (not means "- s/// ...")
+    elsif (m{\G -s                               \s+    \s* (\") ((?:$qq_char)+?)             (\") }oxgc)    { $slash = 'm//'; return '-s ' . e_qq('',  $1,$3,$2); }
+    elsif (m{\G -s                               \s+ qq \s* (\#) ((?:$qq_char)+?)             (\#) }oxgc)    { $slash = 'm//'; return '-s ' . e_qq('qq',$1,$3,$2); }
+    elsif (m{\G -s                               \s+ qq \s* (\() ((?:$qq_paren)+?)            (\)) }oxgc)    { $slash = 'm//'; return '-s ' . e_qq('qq',$1,$3,$2); }
+    elsif (m{\G -s                               \s+ qq \s* (\{) ((?:$qq_brace)+?)            (\}) }oxgc)    { $slash = 'm//'; return '-s ' . e_qq('qq',$1,$3,$2); }
+    elsif (m{\G -s                               \s+ qq \s* (\[) ((?:$qq_bracket)+?)          (\]) }oxgc)    { $slash = 'm//'; return '-s ' . e_qq('qq',$1,$3,$2); }
+    elsif (m{\G -s                               \s+ qq \s* (\<) ((?:$qq_angle)+?)            (\>) }oxgc)    { $slash = 'm//'; return '-s ' . e_qq('qq',$1,$3,$2); }
+    elsif (m{\G -s                               \s+ qq \s* (\S) ((?:$qq_char)+?)             (\3) }oxgc)    { $slash = 'm//'; return '-s ' . e_qq('qq',$1,$3,$2); }
+
+    elsif (m{\G -s                               \s+    \s* (\') ((?:\\\1|\\\\|$q_char)+?)    (\') }oxgc)    { $slash = 'm//'; return '-s ' . e_q ('',  $1,$3,$2); }
+    elsif (m{\G -s                               \s+ q  \s* (\#) ((?:\\\#|\\\\|$q_char)+?)    (\#) }oxgc)    { $slash = 'm//'; return '-s ' . e_q ('q', $1,$3,$2); }
+    elsif (m{\G -s                               \s+ q  \s* (\() ((?:\\\)|\\\\|$q_paren)+?)   (\)) }oxgc)    { $slash = 'm//'; return '-s ' . e_q ('q', $1,$3,$2); }
+    elsif (m{\G -s                               \s+ q  \s* (\{) ((?:\\\}|\\\\|$q_brace)+?)   (\}) }oxgc)    { $slash = 'm//'; return '-s ' . e_q ('q', $1,$3,$2); }
+    elsif (m{\G -s                               \s+ q  \s* (\[) ((?:\\\]|\\\\|$q_bracket)+?) (\]) }oxgc)    { $slash = 'm//'; return '-s ' . e_q ('q', $1,$3,$2); }
+    elsif (m{\G -s                               \s+ q  \s* (\<) ((?:\\\>|\\\\|$q_angle)+?)   (\>) }oxgc)    { $slash = 'm//'; return '-s ' . e_q ('q', $1,$3,$2); }
+    elsif (m{\G -s                               \s+ q  \s* (\S) ((?:\\\1|\\\\|$q_char)+?)    (\3) }oxgc)    { $slash = 'm//'; return '-s ' . e_q ('q', $1,$3,$2); }
+
+    elsif (m{\G -s                               \s* (\$ \w+(?: ::\w+)* (?: (?: ->)? (?: \( (?:$qq_paren)*? \) | \{ (?:$qq_brace)+? \} | \[ (?:$qq_bracket)+? \] ) )*) }oxgc)
+                                                                                                             { $slash = 'm//'; return "-s $1";   }
+    elsif (m{\G -s                               \s* \( ((?:$qq_paren)*?) \) }oxgc)                          { $slash = 'm//'; return "-s ($1)"; }
+    elsif (m{\G -s                               (?= \s+ [a-z]+) }oxgc)                                      { $slash = 'm//'; return '-s';      }
+    elsif (m{\G -s                               \s+ (\w+) }oxgc)                                            { $slash = 'm//'; return "-s $1";   }
+
+    elsif (m{\G \b bytes::length (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'm//'; return 'length';                   }
+    elsif (m{\G \b bytes::chr    (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'm//'; return 'chr';                      }
+    elsif (m{\G \b chr           (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'm//'; return 'Eeucjp::chr';               }
+    elsif (m{\G \b bytes::ord    (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'div'; return 'ord';                      }
+    elsif (m{\G \b ord           (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'div'; return $function_ord;              }
+    elsif (m{\G \b glob          (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $slash = 'm//'; return 'Eeucjp::glob';              }
+    elsif (m{\G    -s \b         (?! \s* => )                         }oxgc) { $slash = 'm//'; return '-s ';                      }
+
+    elsif (m{\G \b bytes::length \b (?! \s* => )                      }oxgc) { $slash = 'm//'; return 'length';                   }
+    elsif (m{\G \b bytes::chr \b    (?! \s* => )                      }oxgc) { $slash = 'm//'; return 'chr';                      }
+    elsif (m{\G \b chr \b           (?! \s* => )                      }oxgc) { $slash = 'm//'; return 'Eeucjp::chr_';              }
+    elsif (m{\G \b bytes::ord \b    (?! \s* => )                      }oxgc) { $slash = 'div'; return 'ord';                      }
+    elsif (m{\G \b ord \b           (?! \s* => )                      }oxgc) { $slash = 'div'; return $function_ord_;             }
+    elsif (m{\G \b glob \b          (?! \s* => )                      }oxgc) { $slash = 'm//'; return 'Eeucjp::glob_';             }
+    elsif (m{\G \b reverse \b       (?! \s* => )                      }oxgc) { $slash = 'm//'; return $function_reverse;          }
 
 # split
     elsif (m{\G \b (split) \b (?! \s* => ) }oxgc) {
@@ -1270,6 +1323,21 @@ sub escape {
         }
     }
 
+# require ignore module
+    elsif (/\G \b require (\s+ (?:$ignore_modules) .*? ;) ([ \t]* [#\n]) /oxmsgc)              { return "# require$1$2";     }
+    elsif (/\G \b require (\s+ (?:$ignore_modules) .*? ;) ([ \t]* [^#])  /oxmsgc)              { return "# require$1\n$2";   }
+    elsif (/\G \b require (\s+ (?:$ignore_modules)) \b                   /oxmsgc)              { return "# require$1";       }
+
+# ignore use module
+    elsif (/\G \b use (\s+ (?:$ignore_modules) .*? ;) ([ \t]* [#\n]) /oxmsgc)                  { return "# use$1$2";         }
+    elsif (/\G \b use (\s+ (?:$ignore_modules) .*? ;) ([ \t]* [^#])  /oxmsgc)                  { return "# use$1\n$2";       }
+    elsif (/\G \b use (\s+ (?:$ignore_modules)) \b                   /oxmsgc)                  { return "# use$1";           }
+
+# ignore no module
+    elsif (/\G \b no  (\s+ (?:$ignore_modules) .*? ;) ([ \t]* [#\n]) /oxmsgc)                  { return "# no$1$2";          }
+    elsif (/\G \b no  (\s+ (?:$ignore_modules) .*? ;) ([ \t]* [^#])  /oxmsgc)                  { return "# no$1\n$2";        }
+    elsif (/\G \b no  (\s+ (?:$ignore_modules)) \b                   /oxmsgc)                  { return "# no$1";            }
+
 # ''
     elsif (/\G (?<![\w\$\@\%\&\*]) (\') /oxgc) {
         my $q_string = '';
@@ -1639,18 +1707,53 @@ E_STRING_LOOP:
 
 # functions of package Eeucjp
         elsif ($string =~ m{\G \b (CORE::(?:split|chop|index|rindex|lc|uc|chr|ord|reverse|open|binmode)) \b }oxgc) { $e_string .= $1; $slash = 'm//'; }
-        elsif ($string =~ m{\G \b chop \b                                    }oxgc) { $e_string .=   'Eeucjp::chop';          $slash = 'm//'; }
-        elsif ($string =~ m{\G \b EUCJP::index \b                             }oxgc) { $e_string .=   'EUCJP::index';          $slash = 'm//'; }
-        elsif ($string =~ m{\G \b index \b                                   }oxgc) { $e_string .=   'Eeucjp::index';         $slash = 'm//'; }
-        elsif ($string =~ m{\G \b EUCJP::rindex \b                            }oxgc) { $e_string .=   'EUCJP::rindex';         $slash = 'm//'; }
-        elsif ($string =~ m{\G \b rindex \b                                  }oxgc) { $e_string .=   'Eeucjp::rindex';        $slash = 'm//'; }
-        elsif ($string =~ m{\G \b chr   (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .=   'Eeucjp::chr';               $slash = 'm//'; }
-        elsif ($string =~ m{\G \b ord   (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .=   $function_ord;              $slash = 'div'; }
-        elsif ($string =~ m{\G \b glob  (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .=   'Eeucjp::glob';              $slash = 'm//'; }
-        elsif ($string =~ m{\G \b chr \b                                     }oxgc) { $e_string .=   'Eeucjp::chr_';              $slash = 'm//'; }
-        elsif ($string =~ m{\G \b ord \b                                     }oxgc) { $e_string .=   $function_ord_;             $slash = 'div'; }
-        elsif ($string =~ m{\G \b glob \b                                    }oxgc) { $e_string .=   'Eeucjp::glob_';             $slash = 'm//'; }
-        elsif ($string =~ m{\G \b reverse \b                                 }oxgc) { $e_string .=   $function_reverse;          $slash = 'm//'; }
+        elsif ($string =~ m{\G \b bytes::substr \b                             }oxgc) { $e_string .= 'substr';         $slash = 'm//'; }
+        elsif ($string =~ m{\G \b chop \b                                      }oxgc) { $e_string .= 'Eeucjp::chop';    $slash = 'm//'; }
+        elsif ($string =~ m{\G \b bytes::index \b                              }oxgc) { $e_string .= 'index';          $slash = 'm//'; }
+        elsif ($string =~ m{\G \b EUCJP::index \b                               }oxgc) { $e_string .= 'EUCJP::index';    $slash = 'm//'; }
+        elsif ($string =~ m{\G \b index \b                                     }oxgc) { $e_string .= 'Eeucjp::index';   $slash = 'm//'; }
+        elsif ($string =~ m{\G \b bytes::rindex \b                             }oxgc) { $e_string .= 'rindex';         $slash = 'm//'; }
+        elsif ($string =~ m{\G \b EUCJP::rindex \b                              }oxgc) { $e_string .= 'EUCJP::rindex';   $slash = 'm//'; }
+        elsif ($string =~ m{\G \b rindex \b                                    }oxgc) { $e_string .= 'Eeucjp::rindex';  $slash = 'm//'; }
+
+        # "-s '' ..." means file test "-s 'filename' ..." (not means "- s/// ...")
+        elsif ($string =~ m{\G -s                               \s+    \s* (\") ((?:$qq_char)+?)             (\") }oxgc)    { $e_string .= '-s ' . e_qq('',  $1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ qq \s* (\#) ((?:$qq_char)+?)             (\#) }oxgc)    { $e_string .= '-s ' . e_qq('qq',$1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ qq \s* (\() ((?:$qq_paren)+?)            (\)) }oxgc)    { $e_string .= '-s ' . e_qq('qq',$1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ qq \s* (\{) ((?:$qq_brace)+?)            (\}) }oxgc)    { $e_string .= '-s ' . e_qq('qq',$1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ qq \s* (\[) ((?:$qq_bracket)+?)          (\]) }oxgc)    { $e_string .= '-s ' . e_qq('qq',$1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ qq \s* (\<) ((?:$qq_angle)+?)            (\>) }oxgc)    { $e_string .= '-s ' . e_qq('qq',$1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ qq \s* (\S) ((?:$qq_char)+?)             (\3) }oxgc)    { $e_string .= '-s ' . e_qq('qq',$1,$3,$2); $slash = 'm//'; }
+
+        elsif ($string =~ m{\G -s                               \s+    \s* (\') ((?:\\\1|\\\\|$q_char)+?)    (\') }oxgc)    { $e_string .= '-s ' . e_q ('',  $1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ q  \s* (\#) ((?:\\\#|\\\\|$q_char)+?)    (\#) }oxgc)    { $e_string .= '-s ' . e_q ('q', $1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ q  \s* (\() ((?:\\\)|\\\\|$q_paren)+?)   (\)) }oxgc)    { $e_string .= '-s ' . e_q ('q', $1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ q  \s* (\{) ((?:\\\}|\\\\|$q_brace)+?)   (\}) }oxgc)    { $e_string .= '-s ' . e_q ('q', $1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ q  \s* (\[) ((?:\\\]|\\\\|$q_bracket)+?) (\]) }oxgc)    { $e_string .= '-s ' . e_q ('q', $1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ q  \s* (\<) ((?:\\\>|\\\\|$q_angle)+?)   (\>) }oxgc)    { $e_string .= '-s ' . e_q ('q', $1,$3,$2); $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ q  \s* (\S) ((?:\\\1|\\\\|$q_char)+?)    (\3) }oxgc)    { $e_string .= '-s ' . e_q ('q', $1,$3,$2); $slash = 'm//'; }
+
+        elsif ($string =~ m{\G -s                               \s* (\$ \w+(?: ::\w+)* (?: (?: ->)? (?: \( (?:$qq_paren)*? \) | \{ (?:$qq_brace)+? \} | \[ (?:$qq_bracket)+? \] ) )*) }oxgc)
+                                                                                                                            { $e_string .= "-s $1";   $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s* \( ((?:$qq_paren)*?) \) }oxgc)                          { $e_string .= "-s ($1)"; $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               (?= \s+ [a-z]+) }oxgc)                                      { $e_string .= '-s';      $slash = 'm//'; }
+        elsif ($string =~ m{\G -s                               \s+ (\w+) }oxgc)                                            { $e_string .= "-s $1";   $slash = 'm//'; }
+
+        elsif ($string =~ m{\G \b bytes::length (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= 'length';                   $slash = 'm//'; }
+        elsif ($string =~ m{\G \b bytes::chr    (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= 'chr';                      $slash = 'm//'; }
+        elsif ($string =~ m{\G \b chr           (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= 'Eeucjp::chr';               $slash = 'm//'; }
+        elsif ($string =~ m{\G \b bytes::ord    (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= 'ord';                      $slash = 'div'; }
+        elsif ($string =~ m{\G \b ord           (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= $function_ord;              $slash = 'div'; }
+        elsif ($string =~ m{\G \b glob          (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= 'Eeucjp::glob';              $slash = 'm//'; }
+        elsif ($string =~ m{\G    -s                               \b                }oxgc) { $e_string .= '-s ';                      $slash = 'm//'; }
+
+        elsif ($string =~ m{\G \b bytes::length \b                                   }oxgc) { $e_string .= 'length';                   $slash = 'm//'; }
+        elsif ($string =~ m{\G \b bytes::chr \b                                      }oxgc) { $e_string .= 'chr';                      $slash = 'm//'; }
+        elsif ($string =~ m{\G \b chr \b                                             }oxgc) { $e_string .= 'Eeucjp::chr_';              $slash = 'm//'; }
+        elsif ($string =~ m{\G \b bytes::ord \b                                      }oxgc) { $e_string .= 'ord';                      $slash = 'div'; }
+        elsif ($string =~ m{\G \b ord \b                                             }oxgc) { $e_string .= $function_ord_;             $slash = 'div'; }
+        elsif ($string =~ m{\G \b glob \b                                            }oxgc) { $e_string .= 'Eeucjp::glob_';             $slash = 'm//'; }
+        elsif ($string =~ m{\G \b reverse \b                                         }oxgc) { $e_string .= $function_reverse;          $slash = 'm//'; }
 
 # split
         elsif ($string =~ m{\G \b (split) \b (?! \s* => ) }oxgc) {
@@ -3580,6 +3683,24 @@ EUCJP - Source code filter to escape EUC-JP
     EUCJP::index(...);
     EUCJP::rindex(...);
 
+  emulate Perl5.6 on perl5.005
+    binmode(...);
+    open(...);
+
+  dummy functions:
+    utf8::upgrade(...);
+    utf8::downgrade(...);
+    utf8::encode(...);
+    utf8::decode(...);
+    utf8::is_utf8(...);
+    utf8::valid(...);
+    bytes::chr(...);
+    bytes::index(...);
+    bytes::length(...);
+    bytes::ord(...);
+    bytes::rindex(...);
+    bytes::substr(...);
+
 =head1 ABSTRACT
 
 Let's start with a bit of history: jperl 4.019+1.3 introduced EUC-JP support.
@@ -3680,12 +3801,14 @@ I am glad that I could confirm my idea is not so wrong.
 
 =head1 SOFTWARE COMPOSITION
 
-   EUCJP.pm          --- source code filter to escape EUC-JP
-   Eeucjp.pm         --- run-time routines for EUCJP.pm
-   perl58.bat       --- find and run perl5.8  without %PATH% settings
-   perl510.bat      --- find and run perl5.10 without %PATH% settings
-   perl512.bat      --- find and run perl5.12 without %PATH% settings
-   perl64.bat       --- find and run perl64   without %PATH% settings
+   EUCJP.pm               --- source code filter to escape EUC-JP
+   Eeucjp.pm              --- run-time routines for EUCJP.pm
+   perl58.bat            --- find and run perl5.8  without %PATH% settings
+   perl510.bat           --- find and run perl5.10 without %PATH% settings
+   perl512.bat           --- find and run perl5.12 without %PATH% settings
+   perl64.bat            --- find and run perl64   without %PATH% settings
+   warnings.pm_          --- poor warnings.pm
+   warnings/register.pm_ --- poor warnings/register.pm
 
 =head1 Upper Compatibility By Escaping
 
@@ -3704,7 +3827,7 @@ You need write 'use EUCJP;' in your script.
   (nothing)   use EUCJP;
   ---------------------------------
 
-=head1 Escaping Multiple Octet Code (EUCJP software provides)
+=head1 Escaping Multiple Octet Code (EUCJP.pm provides)
 
 Insert chr(0x5c) before  @  [  \  ]  ^  `  {  |  and  }  in multiple octet of
 
@@ -3748,7 +3871,7 @@ Insert chr(0x5c) before  @  [  \  ]  ^  `  {  |  and  }  in multiple octet of
   in the perl     "`/"    [83] [5c]
   -----------------------------------------
 
-=head1 Escaping Character Classes (EUCJP software provides)
+=head1 Escaping Character Classes (Eeucjp.pm provides)
 
 The character classes are redefined as follows to backward compatibility.
 
@@ -3778,7 +3901,7 @@ Also \b and \B are redefined as follows to backward compatibility.
   \B          (?:(?<=[0-9A-Z_a-z])(?=[0-9A-Z_a-z])|(?<=[\x00-\x2F\x40\x5B-\x5E\x60\x7B-\xFF])(?=[\x00-\x2F\x40\x5B-\x5E\x60\x7B-\xFF]))
   ---------------------------------------------------------------------------
 
-=head1 Escaping Built-in Functions (EUCJP software provides)
+=head1 Escaping Built-in Functions (EUCJP.pm and Eeucjp.pm provide)
 
 Insert 'Eeucjp::' at head of function name. Eeucjp.pm provides your script Eeucjp::*
 functions.
@@ -3814,6 +3937,21 @@ functions.
   no Perl::Module ();      BEGIN { require 'Perl/Module.pm'; }
   ------------------------------------------------------------------------------------------------------------------------
 
+=head1 Un-Escaping bytes::* Functions (EUCJP.pm provide)
+
+EUCJP.pm remove 'bytes::' at head of function name.
+
+  ------------------------------------
+  Before           After
+  ------------------------------------
+  bytes::chr       chr
+  bytes::index     index
+  bytes::length    length
+  bytes::ord       ord
+  bytes::rindex    rindex
+  bytes::substr    substr
+  ------------------------------------
+
 =head1 Escaping Function Name (You do)
 
 You need write 'EUCJP::' at head of function name when you want character
@@ -3830,7 +3968,7 @@ oriented function. See 'CHARACTER ORIENTED FUNCTIONS'.
   rindex      EUCJP::rindex
   ---------------------------------
 
-=head1 Escaping Built-in Standard Module (EUCJP software provides)
+=head1 Escaping Built-in Standard Module (Eeucjp.pm provides)
 
 Eeucjp.pm does "BEGIN { unshift @INC, '/Perl/site/lib/EUCJP' }" at head.
 Store the standard module modified for EUCJP software in this directory to
@@ -3888,10 +4026,8 @@ Back to and see 'Escaping Your Script'. Enjoy hacking!!
   To find the length of a string in bytes rather than characters, say:
 
   $blen = length($string);
-
-  or
-
   $blen = CORE::length($string);
+  $blen = bytes::length($string);
 
 =item substr by EUC-JP character
 
@@ -3969,6 +4105,207 @@ Back to and see 'Escaping Your Script'. Enjoy hacking!!
 
 =back
 
+=head1 Perl5.6 Emulation on perl5.005
+
+  To be compatible with Perl5.6 on perl5.005, script is converted as follows.
+
+  --------------------------------------------------------------------
+  Before          After                  in BEGIN { } of Eeucjp.pm
+  --------------------------------------------------------------------
+  binmode(...);   Eeucjp::binmode(...);   *CORE::GLOBAL::binmode = ...
+  open(...);      Eeucjp::open(...);      *CORE::GLOBAL::open    = ...
+  --------------------------------------------------------------------
+
+=head1 Ignore utf8 pragma
+
+  Comment out pragma to ignore utf8 environment, and Eeucjp.pm provides these
+  functions.
+
+  ---------------------------------------------------------------------
+  Before          After                  Explanation
+  ---------------------------------------------------------------------
+  use utf8;       # use utf8;            Eeucjp.pm provides utf8::*
+  no utf8;        # no utf8;             functions even if 'no utf8;'
+  use bytes;      # use bytes;           Eeucjp.pm provides bytes::*
+  no bytes;       # no bytes;            functions even if 'no bytes;'
+  ---------------------------------------------------------------------
+
+=over 2
+
+=item binmode (Perl5.6 emulation on perl5.005)
+
+  binmode(FILEHANDLE, $disciplines);
+  binmode(FILEHANDLE);
+  binmode($filehandle, $disciplines);
+  binmode($filehandle);
+
+  * two arguments
+
+  If you are using perl5.005, EUCJP software emulate perl5.6's binmode function.
+  Only the point is here. See also perlfunc/binmode for details.
+
+  This function arranges for the FILEHANDLE to have the semantics specified by the
+  $disciplines argument. If $disciplines is omitted, ':raw' semantics are applied
+  to the filehandle. If FILEHANDLE is an expression, the value is taken as the
+  name of the filehandle or a reference to a filehandle, as appropriate.
+  The binmode function should be called after the open but before any I/O is done
+  on the filehandle. The only way to reset the mode on a filehandle is to reopen
+  the file, since the various disciplines may have treasured up various bits and
+  pieces of data in various buffers.
+
+  The ":raw" discipline tells Perl to keep its cotton-pickin' hands off the data.
+  For more on how disciplines work, see the open function.
+
+=item open (Perl5.6 emulation on perl5.005)
+
+  open(FILEHANDLE, $mode, @list);
+  open(FILEHANDLE, $expr);
+  open(FILEHANDLE);
+  open(my $filehandle, $mode, @list);
+  open(my $filehandle, $expr);
+  open(my $filehandle);
+
+  * autovivification filehandle
+  * three arguments
+
+  If you are using perl5.005, EUCJP software emulate perl5.6's open function.
+  Only the point is here. See also perlfunc/open for details.
+
+  As that example shows, the FILEHANDLE argument is often just a simple identifier
+  (normally uppercase), but it may also be an expression whose value provides a
+  reference to the actual filehandle. (The reference may be either a symbolic
+  reference to the filehandle name or a hard reference to any object that can be
+  interpreted as a filehandle.) This is called an indirect filehandle, and any
+  function that takes a FILEHANDLE as its first argument can handle indirect
+  filehandles as well as direct ones. But open is special in that if you supply
+  it with an undefined variable for the indirect filehandle, Perl will automatically
+  define that variable for you, that is, autovivifying it to contain a proper
+  filehandle reference.
+
+  {
+      my $fh;                   # (uninitialized)
+      open($fh, ">logfile")     # $fh is autovivified
+          or die "Can't create logfile: $!";
+          ...                   # do stuff with $fh
+  }                             # $fh closed here
+
+  The my $fh declaration can be readably incorporated into the open:
+
+  open my $fh, ">logfile" or die ...
+
+  The > symbol you've been seeing in front of the filename is an example of a mode.
+  Historically, the two-argument form of open came first. The recent addition of
+  the three-argument form lets you separate the mode from the filename, which has
+  the advantage of avoiding any possible confusion between the two. In the following
+  example, we know that the user is not trying to open a filename that happens to
+  start with ">". We can be sure that they're specifying a $mode of ">", which opens
+  the file named in $expr for writing, creating the file if it doesn't exist and
+  truncating the file down to nothing if it already exists:
+
+  open(LOG, ">", "logfile")  or die "Can't create logfile: $!";
+
+  With the one- or two-argument form of open, you have to be careful when you use
+  a string variable as a filename, since the variable may contain arbitrarily
+  weird characters (particularly when the filename has been supplied by arbitrarily
+  weird characters on the Internet). If you're not careful, parts of the filename
+  might get interpreted as a $mode string, ignorable whitespace, a dup specification,
+  or a minus.
+  Here's one historically interesting way to insulate yourself:
+
+  $path =~ s#^([ ])#./$1#;
+  open (FH, "< $path\0") or die "can't open $path: $!";
+
+  But that's still broken in several ways. Instead, just use the three-argument
+  form of open to open any arbitrary filename cleanly and without any (extra)
+  security risks:
+
+  open(FH, "<", $path) or die "can't open $path: $!";
+
+  As of the 5.6 release of Perl, you can specify binary mode in the open function
+  without a separate call to binmode. As part of the $mode
+  argument (but only in the three-argument form), you may specify various input
+  and output disciplines.
+  To do the equivalent of a binmode, use the three argument form of open and stuff
+  a discipline of :raw in after the other $mode characters:
+
+  open(FH, "<:raw", $path) or die "can't open $path: $!";
+
+  Table 1. I/O Disciplines
+  -------------------------------------------------
+  Discipline      Meaning
+  -------------------------------------------------
+  :raw            Binary mode; do no processing
+  :crlf           Text mode; Intuit newlines
+  :encoding(...)  Legacy encoding
+  -------------------------------------------------
+
+  You'll be able to stack disciplines that make sense to stack, so, for instance,
+  you could say:
+
+  open(FH, "<:crlf:encoding(EUCJP)", $path) or die "can't open $path: $!";
+
+=item dummy utf8::upgrade
+
+  $num_octets = utf8::upgrade($string);
+
+  Returns the number of octets necessary to represent the string.
+
+=item dummy utf8::downgrade
+
+  $success = utf8::downgrade($string[, FAIL_OK]);
+
+  Returns true always.
+
+=item dummy utf8::encode
+
+  utf8::encode($string);
+
+  Returns nothing.
+
+=item dummy utf8::decode
+
+  $success = utf8::decode($string);
+
+  Returns true always.
+
+=item dummy utf8::is_utf8
+
+  $flag = utf8::is_utf8(STRING);
+
+  Returns false always.
+
+=item dummy utf8::valid
+
+  $flag = utf8::valid(STRING);
+
+  Returns true always.
+
+=item dummy bytes::chr
+
+  This function is same as chr.
+
+=item dummy bytes::index
+
+  This function is same as index.
+
+=item dummy bytes::length
+
+  This function is same as length.
+
+=item dummy bytes::ord
+
+  This function is same as ord.
+
+=item dummy bytes::rindex
+
+  This function is same as rindex.
+
+=item dummy bytes::substr
+
+  This function is same as substr.
+
+=back
+
 =head1 ENVIRONMENT VARIABLE
 
  This software uses the flock function for exclusive control. The execution of the
@@ -3991,12 +4328,6 @@ Please patches and report problems to author are welcome.
 =item * format
 
 Function "format" can't handle multiple octet code same as original Perl.
-
-=item * /o modifier of m/$re/o, s/$re/foo/o and qr/$re/o
-
-/o modifier doesn't do operation the same as the expectation on perl5.6.1.
-The latest value of variable $re is used as a regular expression. This will not
-actually become a problem. Because when you use /o, you are sure not to change $re.
 
 =item * EUCJP::substr as lvalue
 
@@ -4361,6 +4692,7 @@ I am thankful to all persons.
 
  Dan Kogai, Encode module
  http://search.cpan.org/dist/Encode/
+ http://www.dan.co.jp/~dankogai/yapcasia2006/slide.html
 
  Juerd, Perl Unicode Advice
  http://juerd.nl/site.plp/perluniadvice
@@ -4376,7 +4708,7 @@ I am thankful to all persons.
  http://mail.pm.org/pipermail/tokyo-pm/1999-September/001844.html
  http://mail.pm.org/pipermail/tokyo-pm/1999-September/001854.html
 
- ruby-list
+ ruby-list (now 404 Not Found)
  http://blade.nagaokaut.ac.jp/ruby/ruby-list/index.shtml
  http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/2440
  http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-list/2446
