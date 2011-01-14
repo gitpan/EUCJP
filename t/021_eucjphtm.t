@@ -4,6 +4,8 @@ die "This file is not encoded in EUC-JP.\n" if q{あ} ne "\xa4\xa2";
 use EUCJP;
 print "1..1\n";
 
+$_ = '';
+
 # unmatched [ ] in regexp
 # 「正規表現にマッチしない [ ] がある」
 eval { /プール/ };

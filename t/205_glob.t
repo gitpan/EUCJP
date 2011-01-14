@@ -1,8 +1,6 @@
 # This file is encoded in EUC-JP.
 die "This file is not encoded in EUC-JP.\n" if q{дв} ne "\xa4\xa2";
 
-my $__FILE__ = __FILE__;
-
 use EUCJP;
 print "1..1\n";
 

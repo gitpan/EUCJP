@@ -6,6 +6,7 @@ print "1..1\n";
 
 my $__FILE__ = __FILE__;
 
+local $^W = 0;
 if (1) {
     print "ok - 1 # SKIP $^X $__FILE__ not ('¤¤' =~ /$¤¤/).\n";
     exit;

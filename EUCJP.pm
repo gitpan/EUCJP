@@ -5,11 +5,12 @@ package EUCJP;
 #
 #                  http://search.cpan.org/dist/EUCJP/
 #
-# Copyright (c) 2008, 2009, 2010 INABA Hitoshi <ina@cpan.org>
+# Copyright (c) 2008, 2009, 2010, 2011 INABA Hitoshi <ina@cpan.org>
 #
 ######################################################################
 
 use 5.00503;
+use strict;
 use Eeucjp;
 
 # 12.3. Delaying use Until Runtime
@@ -17,9 +18,9 @@ use Eeucjp;
 # of ISBN 0-596-00313-7 Perl Cookbook, 2nd Edition.
 # (and so on)
 
-BEGIN { eval q{ use vars qw($VERSION $_warning) } }
+BEGIN { eval q{ use vars qw($VERSION) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.69 $ =~ m/(\d+)/oxmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.70 $ =~ m/(\d+)/oxmsg;
 
 # poor Symbol.pm - substitute of real Symbol.pm
 BEGIN {
@@ -27,15 +28,11 @@ BEGIN {
     my $genseq = 0;
     sub gensym () {
         my $name = "GEN" . $genseq++;
+        no strict qw(refs);
         my $ref = \*{$genpkg . $name};
         delete $$genpkg{$name};
         $ref;
     }
-}
-
-BEGIN {
-    eval { require strict;   'strict'  ->import; };
-#   eval { require warnings; 'warnings'->import; };
 }
 
 # P.714 29.2.39. flock
@@ -50,9 +47,6 @@ unless (eval q{ use Fcntl qw(:flock); 1 }) {
         sub LOCK_NB {4}
     };
 }
-
-$_warning = $^W; # push warning, warning on
-local $^W = 1;
 
 # P.707 29.2.33. exec
 # in Chapter 29: Functions
@@ -310,14 +304,44 @@ else {
     eval q{ flock($fh, LOCK_SH) };
 }
 
+my @switch = ();
+if ($^W) {
+    push @switch, '-w';
+}
+
 # DOS-like system
 if ($^O =~ /\A (?: MSWin32 | NetWare | symbian | dos ) \z/oxms) {
-    exit system map {m/ $your_gap [ ] /oxms ? qq{"$_"} : $_} $^X, "$filename.e", @ARGV;
+    exit system
+        _escapeshellcmd_MSWin32($^X),
+
+# -I switch can not treat space included path
+#       (map { '-I' . _escapeshellcmd_MSWin32($_) } @INC),
+        (map { '-I' .                         $_  } @INC),
+
+        @switch,
+        '--',
+        map { _escapeshellcmd_MSWin32($_) } "$filename.e", @ARGV;
 }
 
 # UNIX-like system
 else {
-    exit system map { _escapeshellcmd($_) }                  $^X, "$filename.e", @ARGV;
+    exit system
+        _escapeshellcmd($^X),
+        (map { '-I' . _escapeshellcmd($_) } @INC),
+        @switch,
+        '--',
+        map { _escapeshellcmd($_) } "$filename.e", @ARGV;
+}
+
+# escape shell command line on DOS-like system
+sub _escapeshellcmd_MSWin32 {
+    my($word) = @_;
+    if ($word =~ m/ $your_gap [ ] /oxms) {
+        return qq{"$word"};
+    }
+    else {
+        return $word;
+    }
 }
 
 # escape shell command line on UNIX-like system
@@ -563,32 +587,32 @@ sub escape {
         return $1;
     }
 
-# $1, $2, $3 --> $2, $3, $4
+# $1, $2, $3 --> $2, $3, $4 (only when multibyte anchoring is enable)
     elsif (/\G \$ ([1-9][0-9]*) /oxmsgc) {
         $slash = 'div';
-        return '${Eeucjp::capture(' . $1 . ')}';
+        return e_capture($1);
     }
     elsif (/\G \$ \{ \s* ([1-9][0-9]*) \s* \} /oxmsgc) {
         $slash = 'div';
-        return '${Eeucjp::capture(' . $1 . ')}';
+        return e_capture($1);
     }
 
 # $$foo[ ... ] --> $ $foo->[ ... ]
     elsif (/\G \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \[ .+? \] ) /oxmsgc) {
         $slash = 'div';
-        return '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+        return e_capture($1.'->'.$2);
     }
 
 # $$foo{ ... } --> $ $foo->{ ... }
     elsif (/\G \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \{ .+? \} ) /oxmsgc) {
         $slash = 'div';
-        return '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+        return e_capture($1.'->'.$2);
     }
 
 # $$foo
     elsif (/\G \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) /oxmsgc) {
         $slash = 'div';
-        return '${Eeucjp::capture(' . $1 . ')}';
+        return e_capture($1);
     }
 
 # ${ foo }
@@ -600,7 +624,7 @@ sub escape {
 # ${ ... }
     elsif (/\G \$ \s* \{ \s* ( $qq_brace ) \s* \} /oxmsgc) {
         $slash = 'div';
-        return '${Eeucjp::capture(' . $1 . ')}';
+        return e_capture($1);
     }
 
 # variable or function
@@ -1658,31 +1682,31 @@ E_STRING_LOOP:
             $slash = 'div';
         }
 
-# $1, $2, $3 --> $2, $3, $4
+# $1, $2, $3 --> $2, $3, $4 (only when multibyte anchoring is enable)
         elsif ($string =~ /\G \$ ([1-9][0-9]*) /oxmsgc) {
-            $e_string .= '${Eeucjp::capture(' . $1 . ')}';
+            $e_string .= e_capture($1);
             $slash = 'div';
         }
         elsif ($string =~ /\G \$ \{ \s* ([1-9][0-9]*) \s* \} /oxmsgc) {
-            $e_string .= '${Eeucjp::capture(' . $1 . ')}';
+            $e_string .= e_capture($1);
             $slash = 'div';
         }
 
 # $$foo[ ... ] --> $ $foo->[ ... ]
         elsif ($string =~ /\G \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \[ .+? \] ) /oxmsgc) {
-            $e_string .= '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $e_string .= e_capture($1.'->'.$2);
             $slash = 'div';
         }
 
 # $$foo{ ... } --> $ $foo->{ ... }
         elsif ($string =~ /\G \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \{ .+? \} ) /oxmsgc) {
-            $e_string .= '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $e_string .= e_capture($1.'->'.$2);
             $slash = 'div';
         }
 
 # $$foo
         elsif ($string =~ /\G \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) /oxmsgc) {
-            $e_string .= '${Eeucjp::capture(' . $1 . ')}';
+            $e_string .= e_capture($1);
             $slash = 'div';
         }
 
@@ -1694,7 +1718,7 @@ E_STRING_LOOP:
 
 # ${ ... }
         elsif ($string =~ /\G \$ \s* \{ \s* ( $qq_brace ) \s* \} /oxmsgc) {
-            $e_string .= '${Eeucjp::capture(' . $1 . ')}';
+            $e_string .= e_capture($1);
             $slash = 'div';
         }
 
@@ -1751,7 +1775,7 @@ E_STRING_LOOP:
         elsif ($string =~ m{\G \b bytes::ord    (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= 'ord';                      $slash = 'div'; }
         elsif ($string =~ m{\G \b ord           (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= $function_ord;              $slash = 'div'; }
         elsif ($string =~ m{\G \b glob          (?= \s+[A-Za-z_]|\s*['"`\$\@\&\*\(]) }oxgc) { $e_string .= 'Eeucjp::glob';              $slash = 'm//'; }
-        elsif ($string =~ m{\G    -s                               \b                }oxgc) { $e_string .= '-s ';                      $slash = 'm//'; }
+        elsif ($string =~ m{\G    -s                              \b                 }oxgc) { $e_string .= '-s ';                      $slash = 'm//'; }
 
         elsif ($string =~ m{\G \b bytes::length \b                                   }oxgc) { $e_string .= 'length';                   $slash = 'm//'; }
         elsif ($string =~ m{\G \b bytes::chr \b                                      }oxgc) { $e_string .= 'chr';                      $slash = 'm//'; }
@@ -2183,6 +2207,15 @@ sub classic_character_class {
 }
 
 #
+# escape capture ($1, $2, $3, ...)
+#
+sub e_capture {
+
+    return join '', '${Eeucjp::capture(', $_[0], ')}';
+    return join '', '$',                 $_[0];
+}
+
+#
 # escape transliteration (tr/// or y///)
 #
 sub e_tr {
@@ -2327,27 +2360,27 @@ sub e_qq {
         elsif ($char[$i] =~ m/\A \$\$ \z/oxms) {
         }
 
-        # $1, $2, $3 --> $2, $3, $4
+        # $1, $2, $3 --> $2, $3, $4 (only when multibyte anchoring is enable)
         elsif ($char[$i] =~ m/\A \$ ([1-9][0-9]*) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
         elsif ($char[$i] =~ m/\A \$ \{ \s* ([1-9][0-9]*) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # $$foo[ ... ] --> $ $foo->[ ... ]
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \[ (?:$qq_bracket)*? \] ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo{ ... } --> $ $foo->{ ... }
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \{ (?:$qq_brace)*? \} ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # ${ foo } --> ${ foo }
@@ -2356,7 +2389,7 @@ sub e_qq {
 
         # ${ ... }
         elsif ($char[$i] =~ m/\A \$ \s* \{ \s* ( .+ ) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
     }
 
@@ -2468,27 +2501,27 @@ sub e_heredoc {
         elsif ($char[$i] =~ m/\A \$\$ \z/oxms) {
         }
 
-        # $1, $2, $3 --> $2, $3, $4
+        # $1, $2, $3 --> $2, $3, $4 (only when multibyte anchoring is enable)
         elsif ($char[$i] =~ m/\A \$ ([1-9][0-9]*) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
         elsif ($char[$i] =~ m/\A \$ \{ \s* ([1-9][0-9]*) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # $$foo[ ... ] --> $ $foo->[ ... ]
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \[ (?:$qq_bracket)*? \] ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo{ ... } --> $ $foo->{ ... }
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \{ (?:$qq_brace)*? \} ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # ${ foo } --> ${ foo }
@@ -2497,7 +2530,7 @@ sub e_heredoc {
 
         # ${ ... }
         elsif ($char[$i] =~ m/\A \$ \s* \{ \s* ( .+ ) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
     }
 
@@ -2679,27 +2712,27 @@ sub e_qr {
         elsif ($char[$i] =~ m/\A \$\$ \z/oxms) {
         }
 
-        # $1, $2, $3 --> $2, $3, $4
+        # $1, $2, $3 --> $2, $3, $4 (only when multibyte anchoring is enable)
         elsif ($char[$i] =~ m/\A \$ ([1-9][0-9]*) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
         elsif ($char[$i] =~ m/\A \$ \{ \s* ([1-9][0-9]*) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # $$foo[ ... ] --> $ $foo->[ ... ]
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \[ (?:$qq_bracket)*? \] ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo{ ... } --> $ $foo->{ ... }
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \{ (?:$qq_brace)*? \} ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # ${ foo }
@@ -2708,7 +2741,7 @@ sub e_qr {
 
         # ${ ... }
         elsif ($char[$i] =~ m/\A \$ \s* \{ \s* ( .+ ) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # $scalar or @array
@@ -3003,21 +3036,21 @@ sub e_s1 {
         elsif ($char[$i] =~ m/\A \\g \s* \{ \s* - \s* ([1-9][0-9]*) \s* \} \z/oxms) {
         }
 
-        # \g{1}, \g{2}, \g{3} --> \g{2}, \g{3}, \g{4}
+        # \g{1}, \g{2}, \g{3} --> \g{2}, \g{3}, \g{4} (only when multibyte anchoring is enable)
         elsif ($char[$i] =~ m/\A \\g \s* \{ \s* ([1-9][0-9]*) \s* \} \z/oxms) {
             if ($1 <= $parens) {
                 $char[$i] = '\\g{' . ($1 + 1) . '}';
             }
         }
 
-        # \g1, \g2, \g3 --> \g2, \g3, \g4
+        # \g1, \g2, \g3 --> \g2, \g3, \g4 (only when multibyte anchoring is enable)
         elsif ($char[$i] =~ m/\A \\g \s* ([1-9][0-9]*) \z/oxms) {
             if ($1 <= $parens) {
                 $char[$i] = '\\g' . ($1 + 1);
             }
         }
 
-        # \1, \2, \3 --> \2, \3, \4
+        # \1, \2, \3 --> \2, \3, \4 (only when multibyte anchoring is enable)
         elsif ($char[$i] =~ m/\A \\ \s* ([1-9][0-9]*) \z/oxms) {
             if ($1 <= $parens) {
                 $char[$i] = '\\' . ($1 + 1);
@@ -3034,27 +3067,27 @@ sub e_s1 {
         elsif ($char[$i] =~ m/\A \$\$ \z/oxms) {
         }
 
-        # $1, $2, $3 --> $2, $3, $4
+        # $1, $2, $3 --> $2, $3, $4 (only when multibyte anchoring is enable)
         elsif ($char[$i] =~ m/\A \$ ([1-9][0-9]*) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
         elsif ($char[$i] =~ m/\A \$ \{ \s* ([1-9][0-9]*) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # $$foo[ ... ] --> $ $foo->[ ... ]
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \[ (?:$qq_bracket)*? \] ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo{ ... } --> $ $foo->{ ... }
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \{ (?:$qq_brace)*? \} ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # ${ foo }
@@ -3063,7 +3096,7 @@ sub e_s1 {
 
         # ${ ... }
         elsif ($char[$i] =~ m/\A \$ \s* \{ \s* ( .+ ) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # $scalar or @array
@@ -3287,15 +3320,15 @@ sub e_sub {
         $local = 'my';
     }
 
-    # s///g
-    my $sub;
-    if ($modifier =~ m/g/oxms) {
+    my $sub = '';
+    if (0) {
+    }
 
-        my $prematch = q{1};
-
+    # s///g with multibyte anchoring
+    elsif ($modifier =~ m/g/oxms) {
         $sub = sprintf(
-            #      1  2       3  4              5 6 7   8  9         10  1112  13    14 15           16          17    18 19     20          21       22    23      24
-            q<eval{%s %s_n=0; %s %s_a=''; while(%s%s%s){%s %s_r=eval %s; %s%s="%s_a${%s}%s_r$'"; pos(%s)=length "%s_a${%s}%s_r"; %s_a=substr(%s,0,pos(%s)); %s_n++} %s_n}>,
+            #      1  2       3  4              5 6 7                                     8  9         10  1112  13      14           15          16      17     18          19       20    21             22
+            q<eval{%s %s_n=0; %s %s_a=''; while(%s%s%s){ no strict qw(refs); local $^W=0; %s %s_r=eval %s; %s%s="%s_a${1}%s_r$'"; pos(%s)=length "%s_a${1}%s_r"; %s_a=substr(%s,0,pos(%s)); %s_n++} return %s_n}>,
 
             $local,                                                                       #  1
                 $variable_basename,                                                       #  2
@@ -3312,29 +3345,53 @@ sub e_sub {
             sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, # 11
             $variable,                                                                    # 12
                 $variable_basename,                                                       # 13
-            $prematch,                                                                    # 14
-                $variable_basename,                                                       # 15
-            $variable,                                                                    # 16
+                $variable_basename,                                                       # 14
+            $variable,                                                                    # 15
+                $variable_basename,                                                       # 16
                 $variable_basename,                                                       # 17
-            $prematch,                                                                    # 18
-                $variable_basename,                                                       # 19
-                $variable_basename,                                                       # 20
-            $variable,                                                                    # 21
-            $variable,                                                                    # 22
-                $variable_basename,                                                       # 23
-                $variable_basename,                                                       # 24
+                $variable_basename,                                                       # 18
+            $variable,                                                                    # 19
+            $variable,                                                                    # 20
+                $variable_basename,                                                       # 21
+                $variable_basename,                                                       # 22
+        );
+    }
+
+    # s///g without multibyte anchoring
+    elsif ($modifier =~ m/g/oxms) {
+        $sub = sprintf(
+            #      1  2             3 4 5                                     6  7         8   9 10    11           12            13     14             15
+            q<eval{%s %s_n=0; while(%s%s%s){ no strict qw(refs); local $^W=0; %s %s_r=eval %s; %s%s="$`%s_r$'"; pos(%s)=length "$`%s_r"; %s_n++} return %s_n}>,
+
+            $local,                                                                       #  1
+                $variable_basename,                                                       #  2
+            $variable,                                                                    #  3
+            $bind_operator,                                                               #  4
+            ($delimiter1 eq "'") ?                                                        #  5
+            e_s1_q('m', $delimiter1, $end_delimiter1, $pattern, $modifier) :              #  :
+            e_s1  ('m', $delimiter1, $end_delimiter1, $pattern, $modifier),               #  :
+            $local,                                                                       #  6
+                $variable_basename,                                                       #  7
+            $e_replacement,                                                               #  8
+            sprintf('%s_r=eval %s_r; ', $variable_basename, $variable_basename) x $e_modifier, #  9
+            $variable,                                                                    # 10
+                $variable_basename,                                                       # 11
+            $variable,                                                                    # 12
+                $variable_basename,                                                       # 13
+                $variable_basename,                                                       # 14
+                $variable_basename,                                                       # 15
         );
     }
 
     # s///
     else {
 
-        my $prematch = q{`};
-        $prematch = q{1};
+        my $prematch = q{$`};
+        $prematch = q{${1}};
 
         $sub = sprintf(
-            #  1 2 3          4  5         6   7 8     9  10
-            q<(%s%s%s) ? eval{%s %s_r=eval %s; %s%s="${%s}%s_r$'"; 1 } : ''>,
+            #  1 2 3                                            4  5         6   7 8   9 10
+            q<(%s%s%s) ? eval{ no strict qw(refs); local $^W=0; %s %s_r=eval %s; %s%s="%s%s_r$'"; 1 } : undef>,
 
             $variable,                                                                    #  1
             $bind_operator,                                                               #  2
@@ -3509,27 +3566,27 @@ sub e_split {
         elsif ($char[$i] =~ m/\A \$\$ \z/oxms) {
         }
 
-        # $1, $2, $3 --> $2, $3, $4
+        # $1, $2, $3 --> $2, $3, $4 (only when multibyte anchoring is enable)
         elsif ($char[$i] =~ m/\A \$ ([1-9][0-9]*) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
         elsif ($char[$i] =~ m/\A \$ \{ \s* ([1-9][0-9]*) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # $$foo[ ... ] --> $ $foo->[ ... ]
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \[ (?:$qq_bracket)*? \] ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo{ ... } --> $ $foo->{ ... }
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) ( \{ (?:$qq_brace)*? \} ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . '->' . $2 . ')}';
+            $char[$i] = e_capture($1.'->'.$2);
         }
 
         # $$foo
         elsif ($char[$i] =~ m/\A \$ ( \$ [A-Za-z_][A-Za-z0-9_]*(?: ::[A-Za-z_][A-Za-z0-9_]*)* ) \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # ${ foo }
@@ -3538,7 +3595,7 @@ sub e_split {
 
         # ${ ... }
         elsif ($char[$i] =~ m/\A \$ \s* \{ \s* ( .+ ) \s* \} \z/oxms) {
-            $char[$i] = '${Eeucjp::capture(' . $1 . ')}';
+            $char[$i] = e_capture($1);
         }
 
         # $scalar or @array
@@ -3810,12 +3867,18 @@ I am glad that I could confirm my idea is not so wrong.
 
    EUCJP.pm               --- source code filter to escape EUC-JP
    Eeucjp.pm              --- run-time routines for EUCJP.pm
+   perl55.bat            --- find and run perl5.5  without %PATH% settings
+   perl56.bat            --- find and run perl5.6  without %PATH% settings
    perl58.bat            --- find and run perl5.8  without %PATH% settings
    perl510.bat           --- find and run perl5.10 without %PATH% settings
    perl512.bat           --- find and run perl5.12 without %PATH% settings
    perl64.bat            --- find and run perl64   without %PATH% settings
+   strict.pm_            --- dummy strict.pm
    warnings.pm_          --- poor warnings.pm
    warnings/register.pm_ --- poor warnings/register.pm
+
+   Rename and install strict.pm_ of this distribution to strict.pm if your system
+   doesn't have strict.pm.
 
 =head1 Upper Compatibility By Escaping
 
@@ -3944,7 +4007,7 @@ functions.
   no Perl::Module ();      BEGIN { require 'Perl/Module.pm'; }
   ------------------------------------------------------------------------------------------------------------------------
 
-=head1 Un-Escaping bytes::* Functions (EUCJP.pm provide)
+=head1 Un-Escaping bytes::* Functions (EUCJP.pm provides)
 
 EUCJP.pm remove 'bytes::' at head of function name.
 
@@ -4668,6 +4731,7 @@ programming environment like at that time.
  http://search.cpan.org/dist/Big5Plus/
  http://search.cpan.org/dist/EUCJP/
  http://search.cpan.org/dist/GB18030/
+ http://search.cpan.org/dist/GBK/
  http://search.cpan.org/dist/HP15/
  http://search.cpan.org/dist/INFORMIXV6ALS/
  http://search.cpan.org/dist/Latin1/

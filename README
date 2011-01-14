@@ -11,6 +11,8 @@ SYNOPSIS
     At command prompt:
 
       perl.exe  yourscript.pl  wild*  *card  and  '*quote*'  on MSWin32
+      perl55    yourscript.pl  wild*  *card  and  '*quote*'  on MSWin32
+      perl56    yourscript.pl  wild*  *card  and  '*quote*'  on MSWin32
       perl58    yourscript.pl  wild*  *card  and  '*quote*'  on MSWin32
       perl510   yourscript.pl  wild*  *card  and  '*quote*'  on MSWin32
       perl512   yourscript.pl  wild*  *card  and  '*quote*'  on MSWin32
@@ -22,6 +24,8 @@ DESCRIPTION
       We can write the script in EUC-JP again.
 
       This software treats EUC-JP directly. Therefore, there is not UTF8 flag.
+      This software can treat subspecies of EUC-JP. For instance, it is
+      eucJP-ms, CP51932, EUC-JISX0213, and EUC-JIS-2004, etc.
 
 INSTALLATION BY MAKE (for UNIX)
 
@@ -32,6 +36,9 @@ To install this software by make, type the following:
    make test
    make install
 
+   Rename and install strict.pm_ of this distribution to strict.pm if your system
+   doesn't have strict.pm.
+
 INSTALLATION WITHOUT MAKE (for DOS like system)
 
 To install this software without make, type the following:
@@ -41,10 +48,15 @@ To install this software without make, type the following:
    pmake.bat test
 
    pmake.bat install           --- install to current using Perl
+   perl55   pmake.bat install  --- install to Perl5.5
+   perl56   pmake.bat install  --- install to Perl5.6
    perl58   pmake.bat install  --- install to Perl5.8
    perl510  pmake.bat install  --- install to Perl5.10
    perl512  pmake.bat install  --- install to Perl5.12
    perl64   pmake.bat install  --- install to Perl64
+
+   Rename and install strict.pm_ of this distribution to strict.pm if your system
+   doesn't have strict.pm.
 
    pmake.bat dist       --- make distribution package
    pmake.bat ptar.bat   --- make perl script "ptar.bat"
@@ -53,10 +65,13 @@ PROGRAM COMPOSITION
 
    EUCJP.pm              --- source code filter for EUC-JP script
    Eeucjp.pm             --- run-time routines for EUCJP.pm
+   perl55.bat            --- find and run perl5.5  without %PATH% settings
+   perl56.bat            --- find and run perl5.6  without %PATH% settings
    perl58.bat            --- find and run perl5.8  without %PATH% settings
    perl510.bat           --- find and run perl5.10 without %PATH% settings
    perl512.bat           --- find and run perl5.12 without %PATH% settings
    perl64.bat            --- find and run perl64   without %PATH% settings
+   strict.pm_            --- dummy strict.pm
    warnings.pm_          --- poor warnings.pm
    warnings/register.pm_ --- poor warnings/register.pm
 

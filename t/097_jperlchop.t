@@ -4,7 +4,7 @@ die "This file is not encoded in EUC-JP.\n" if q{дв} ne "\xa4\xa2";
 use EUCJP;
 print "1..4\n";
 
-my $__FILE__ = $__FILE__;
+my $__FILE__ = __FILE__;
 
 #
 # chop, chomp
