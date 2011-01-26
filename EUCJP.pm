@@ -20,7 +20,7 @@ use Eeucjp;
 
 BEGIN { eval q{ use vars qw($VERSION) } }
 
-$VERSION = sprintf '%d.%02d', q$Revision: 0.70 $ =~ m/(\d+)/oxmsg;
+$VERSION = sprintf '%d.%02d', q$Revision: 0.71 $ =~ m/(\d+)/oxmsg;
 
 # poor Symbol.pm - substitute of real Symbol.pm
 BEGIN {
@@ -39,14 +39,10 @@ BEGIN {
 # in Chapter 29: Functions
 # of ISBN 0-596-00027-8 Programming Perl Third Edition.
 
-unless (eval q{ use Fcntl qw(:flock); 1 }) {
-    eval q{
-        sub LOCK_SH {1}
-        sub LOCK_EX {2}
-        sub LOCK_UN {8}
-        sub LOCK_NB {4}
-    };
-}
+sub LOCK_SH() {1}
+sub LOCK_EX() {2}
+sub LOCK_UN() {8}
+sub LOCK_NB() {4}
 
 # P.707 29.2.33. exec
 # in Chapter 29: Functions
@@ -2751,9 +2747,7 @@ sub e_qr {
 
         # quote character before ? + * {
         elsif (($i >= 1) and ($char[$i] =~ m/\A [\?\+\*\{] \z/oxms)) {
-            if (CORE::length($char[$i-1]) == 1) {
-            }
-            elsif ($char[$i-1] =~ m/\A (?:\\[0-7]{2,3}|\\x[0-9-A-Fa-f]{1,2}) \z/oxms) {
+            if ($char[$i-1] =~ m/\A (?:[\x00-\xFF]|\\[0-7]{2,3}|\\x[0-9-A-Fa-f]{1,2}) \z/oxms) {
             }
             else {
                 $char[$i-1] = '(?:' . $char[$i-1] . ')';
@@ -2848,7 +2842,7 @@ sub e_qr_q {
 
         # quote character before ? + * {
         elsif (($i >= 1) and ($char[$i] =~ m/\A [\?\+\*\{] \z/oxms)) {
-            if (CORE::length($char[$i-1]) == 1) {
+            if ($char[$i-1] =~ m/\A [\x00-\xFF] \z/oxms) {
             }
             else {
                 $char[$i-1] = '(?:' . $char[$i-1] . ')';
@@ -3106,9 +3100,7 @@ sub e_s1 {
 
         # quote character before ? + * {
         elsif (($i >= 1) and ($char[$i] =~ m/\A [\?\+\*\{] \z/oxms)) {
-            if (CORE::length($char[$i-1]) == 1) {
-            }
-            elsif ($char[$i-1] =~ m/\A (?:\\[0-7]{2,3}|\\x[0-9-A-Fa-f]{1,2}) \z/oxms) {
+            if ($char[$i-1] =~ m/\A (?:[\x00-\xFF]|\\[0-7]{2,3}|\\x[0-9-A-Fa-f]{1,2}) \z/oxms) {
             }
             else {
                 $char[$i-1] = '(?:' . $char[$i-1] . ')';
@@ -3205,7 +3197,7 @@ sub e_s1_q {
 
         # quote character before ? + * {
         elsif (($i >= 1) and ($char[$i] =~ m/\A [\?\+\*\{] \z/oxms)) {
-            if (CORE::length($char[$i-1]) == 1) {
+            if ($char[$i-1] =~ m/\A [\x00-\xFF] \z/oxms) {
             }
             else {
                 $char[$i-1] = '(?:' . $char[$i-1] . ')';
@@ -3605,9 +3597,7 @@ sub e_split {
 
         # quote character before ? + * {
         elsif (($i >= 1) and ($char[$i] =~ m/\A [\?\+\*\{] \z/oxms)) {
-            if (CORE::length($char[$i-1]) == 1) {
-            }
-            elsif ($char[$i-1] =~ m/\A (?:\\[0-7]{2,3}|\\x[0-9-A-Fa-f]{1,2}) \z/oxms) {
+            if ($char[$i-1] =~ m/\A (?:[\x00-\xFF]|\\[0-7]{2,3}|\\x[0-9-A-Fa-f]{1,2}) \z/oxms) {
             }
             else {
                 $char[$i-1] = '(?:' . $char[$i-1] . ')';
@@ -3701,7 +3691,7 @@ sub e_split_q {
 
         # quote character before ? + * {
         elsif (($i >= 1) and ($char[$i] =~ m/\A [\?\+\*\{] \z/oxms)) {
-            if (CORE::length($char[$i-1]) == 1) {
+            if ($char[$i-1] =~ m/\A [\x00-\xFF] \z/oxms) {
             }
             else {
                 $char[$i-1] = '(?:' . $char[$i-1] . ')';
